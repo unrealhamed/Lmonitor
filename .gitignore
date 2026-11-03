@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+
+# Build output (made by build.bat / build_qt.bat / build_installer*.bat)
+_build/
+_build_qt/
+_output/
+dist/
+build/
+*.spec
+
+# Third-party binaries - download them yourself, see docs/BUILD.md and docs/THIRD_PARTY.md
+*.dll
+PresentMon*.exe
+PawnIO_setup.exe
+
+# Installers belong on the GitHub Releases page, not in the repository
+Lmonitor_Setup_*.exe
+
+# Generated files
+Lmonitor.ico.bak
+version_info.txt
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Local data (never commit)
+*.log
+sessions.db
+settings.json
