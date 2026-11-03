@@ -123,6 +123,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Made by a new developer named [unrealhamed](https://github.com/unrealhamed).
 
-## License
 
-**Not chosen yet.** Until the project owner adds a `LICENSE` file, all rights are reserved by the author by default.
