@@ -7,10 +7,13 @@ It puts a small click-through bar over your game (FPS, 1% lows, CPU / GPU / RAM 
 
 > **Status: early release (v1.15.2).** The new Qt interface and the installer are young and have been tested by the author on one Windows 11 laptop (NVIDIA GPU + Intel CPU). Some sensors may show `n/a` on other hardware. Bug reports are welcome.
 
-<!-- Screenshots: see docs/screenshots/README.md. When you have added real screenshots,
-     remove this comment and show them here, for example:
-     ![Dashboard](docs/screenshots/dashboard.png)
--->
+## Screenshots
+
+![Lmonitor home page: CPU, GPU, RAM and storage cards, a performance chart and the overlay preview](docs/screenshots/dashboard.png)
+
+| Overlay settings | Optimizer |
+|---|---|
+| ![Overlay page: live preview of the bar, density, position, appearance and the metrics it shows](docs/screenshots/overlay-settings.png) | ![Optimizer page: quick presets, Windows game settings, power plan, startup programs and undo history](docs/screenshots/optimizer.png) |
 
 ## Download and install
 
