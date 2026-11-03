@@ -1,6 +1,6 @@
 # Screenshots
 
-This folder is intentionally empty: the repository must only show **real** screenshots of the current program, and none were available when it was prepared. (Older preview pictures belonged to the old interface and were rendered in a test environment, so they are not included.)
+Real screenshots of the current program (v1.15.2). Already here: `dashboard.png`, `overlay-settings.png`, `optimizer.png` (the startup-program list is blurred on purpose).
 
 ## How to take them
 1. Start Lmonitor, press `Win + Shift + S`, select the window and save the picture here as PNG.
@@ -19,7 +19,7 @@ This folder is intentionally empty: the repository must only show **real** scree
 | `personalize.png` | Personalize page (themes) |
 
 ## Show them in the README
-In `README.md` find the comment block `<!-- Screenshots ... -->`, delete the comment marks and add lines like:
+Add new pictures to the **Screenshots** section of `README.md` (and **تصاویر** in `README.fa.md`), for example:
 
 ```
 ![Dashboard](docs/screenshots/dashboard.png)
