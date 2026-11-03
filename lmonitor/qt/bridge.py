@@ -6,14 +6,19 @@ signals. Settings are validated by the engine and saved (debounced) through
 the same Settings class as the classic window, so both windows share
 %APPDATA%\\Lmonitor\\settings.json.
 """
+import subprocess
+import sys
+import tempfile
 import threading
 import time
 
-from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
-from PySide6.QtGui import QFontDatabase
+from PySide6.QtCore import Property, QCoreApplication, QObject, QTimer, Signal, Slot
+from PySide6.QtCore import QUrl
+from PySide6.QtGui import QDesktopServices, QFontDatabase
 
 from lmonitor.backend import HW_TABS, RANGES, Backend
-from lmonitor.engine import Logger, Metrics, Theme
+from lmonitor import updater
+from lmonitor.engine import AppInfo, Logger, Metrics, Theme
 from lmonitor.qt.tools import Tools
 
 
@@ -28,6 +33,8 @@ class Bridge(QObject):
     qmlErrorsChanged = Signal()
     _sampled = Signal(dict)            # worker thread -> UI thread
     _overlay_sampled = Signal(dict)
+    updateChanged = Signal()
+    _update_done = Signal(dict)
 
     FALLBACK_FONTS = ("Consolas", "Cascadia Mono", "Courier New")
 
@@ -49,6 +56,9 @@ class Bridge(QObject):
         self._wake = threading.Event()
         self._sampled.connect(self._on_sampled)
         self._overlay_sampled.connect(self._on_overlay)
+        self._update_done.connect(self._on_update)
+        self._upd = {"state": "idle", "text": ""}
+        self._info = None
         self._threads = [
             threading.Thread(target=self._loop, name="sampler", daemon=True),
             threading.Thread(target=self._overlay_loop, name="overlay", daemon=True)]
@@ -61,6 +71,48 @@ class Bridge(QObject):
     def start(self):
         for t in self._threads:
             t.start()
+        self.checkUpdate()
+
+    # ---- updates (GitHub Releases, see lmonitor/updater.py)
+    @Property("QVariantMap", notify=updateChanged)
+    def update(self):
+        return self._upd
+
+    def _on_update(self, d):
+        self._upd = d
+        self.updateChanged.emit()
+        if d["state"] == "ready":                # installer downloaded and checked
+            subprocess.Popen('cmd /c "%s"' % updater.install_command(d["path"], sys.executable),
+                             creationflags=0x08000000 | 0x00000008)    # no window, detached
+            QCoreApplication.quit()
+
+    def _update_job(self, download):
+        try:
+            if download:
+                d = {"state": "ready", "path": updater.download(self._info, tempfile.gettempdir())}
+            else:
+                self._info = updater.latest(AppInfo.VERSION)
+                d = ({"state": "available", "version": self._info["version"]} if self._info
+                     else {"state": "none"})
+        except Exception as e:
+            d = {"state": "error", "text": str(e) or type(e).__name__}
+        self._update_done.emit(d)
+
+    @Slot()
+    def checkUpdate(self):
+        if self._upd["state"] not in ("checking", "downloading"):
+            self._upd = {"state": "checking"}
+            self.updateChanged.emit()
+            threading.Thread(target=self._update_job, args=(False,), daemon=True).start()
+
+    @Slot()
+    def installUpdate(self):
+        if not getattr(sys, "frozen", False):            # from source: no installer run
+            QDesktopServices.openUrl(QUrl(self._info["page"]))
+        elif self._upd["state"] == "available":
+            self._upd = dict(self._upd, state="downloading")
+            self.updateChanged.emit()
+            threading.Thread(target=self._update_job, args=(True,), daemon=True).start()
 
     def stop(self):
         self._stop.set()

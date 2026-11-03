@@ -75,7 +75,7 @@ Everything is saved automatically in `%APPDATA%\Lmonitor\settings.json`.
 - **Administrator rights.** Lmonitor asks for them at start because the hardware sensors (especially CPU temperature) cannot be read without them.
 - **CPU temperature and power** need the [PawnIO](https://pawnio.eu) driver on many CPUs (the installer offers it).
 - **FPS** is captured with the bundled [PresentMon](https://github.com/GameTechDev/PresentMon). Anti-cheat software in some online games may dislike overlays and hardware drivers - use at your own risk.
-- Lmonitor has no telemetry. The only web address it contains is the PawnIO download link, opened in your browser if the bundled installer is missing.
+- Lmonitor has no telemetry. It contacts the internet only to check GitHub Releases for a newer version (at start and when you press *Check for updates* in *About*) and, if you choose to update, to download the installer from there. The PawnIO download link is opened in your browser only if the bundled installer is missing.
 
 ## Run from source
 
