@@ -34,3 +34,12 @@ jobs:
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
     - name: Run tests
       run: python tests/run_all.py
+    - name: Show details of failed tests
+      if: failure()
+      run: |
+        for f in tests/test_*.py; do
+          out=$(python -u "$f" 2>&1) || true
+          if echo "$out" | grep -qE '^FAIL |Traceback|[1-9][0-9]* failed'; then
+            echo "===== $f"; echo "$out" | grep -vE '^PASS ' | tail -40
+          fi
+        done
