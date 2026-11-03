@@ -117,7 +117,3 @@ python monitor.py
 [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) (سنسورها، MPL-2.0)، [PresentMon](https://github.com/GameTechDev/PresentMon) (FPS، MIT)، [PawnIO](https://pawnio.eu) (درایور، GPL-2.0 با یک استثنا)، PySide6 / Qt، psutil، pythonnet، nvidia-ml-py، Pillow و pystray. جزئیات: [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md). پیش از بازتوزیع، مجوز آن‌ها را بخوانید.
 
 ساخته‌شده توسط یک توسعه‌دهنده‌ی تازه‌کار به نام [unrealhamed](https://github.com/unrealhamed).
-
-## مجوز
-
-**هنوز انتخاب نشده است.** تا وقتی مالک پروژه فایل `LICENSE` اضافه نکند، به‌طور پیش‌فرض همه‌ی حقوق برای سازنده محفوظ است.
