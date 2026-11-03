@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import re
+import urllib.error
 import urllib.request
 from urllib.parse import urlparse
 
@@ -31,8 +32,18 @@ def _get(url, opener, timeout=15):
 
 
 def latest(current, opener=urllib.request.urlopen):
-    with _get(API, opener) as r:
-        rel = json.loads(r.read().decode("utf-8"))
+    try:
+        with _get(API, opener) as r:
+            rel = json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        if e.code not in (403, 429):                 # API limit (60/hour per IP): use the web redirect
+            raise
+        with _get("https://github.com/%s/releases/latest" % REPO, opener) as r:
+            url = r.geturl()
+        tag = url.rsplit("/", 1)[-1]
+        name = "Lmonitor_Setup_%s.exe" % ".".join(map(str, parse_version(tag) or ()))
+        rel = {"tag_name": tag, "html_url": url, "assets": [{"name": name, "size": None,
+               "browser_download_url": "https://github.com/%s/releases/download/%s/%s" % (REPO, tag, name)}]}
     new, old = parse_version(rel.get("tag_name", "")), parse_version(current)
     if rel.get("draft") or rel.get("prerelease") or not new or not old or new <= old:
         return None
@@ -50,7 +61,11 @@ def download(info, folder, opener=urllib.request.urlopen):
     path = os.path.join(folder, info["name"])
     part, h = path + ".part", hashlib.sha256()
     try:
-        with _get(info["url"], opener, 60) as r, open(part, "wb") as f:
+        try:
+            r = _get(info["url"], opener, 60)
+        except urllib.error.HTTPError as e:
+            raise UpdateError("%s was not found on the release (HTTP %s)" % (info["name"], e.code))
+        with r, open(part, "wb") as f:
             for chunk in iter(lambda: r.read(1 << 16), b""):
                 f.write(chunk)
                 h.update(chunk)
