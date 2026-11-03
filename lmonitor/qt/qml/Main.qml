@@ -87,8 +87,12 @@ Window {
         }
         Card {
             x: 10; y: parent.height - 94; width: parent.width - 20; height: 84
-            Text { x: 14; y: 14; text: "Version"; color: Tokens.dim
-                   font.family: Tokens.font; font.pixelSize: Tokens.fsSmall }
+            Text { x: 14; y: 14; color: backend.update.state === "available" ? Tokens.accent : Tokens.dim
+                   text: backend.update.state === "available" ? "Update available: " + backend.update.version : "Version"
+                   font.family: Tokens.font; font.pixelSize: Tokens.fsSmall
+                   font.bold: backend.update.state === "available"
+                   MouseArea { anchors.fill: parent; enabled: backend.update.state === "available"
+                               cursorShape: Qt.PointingHandCursor; onClicked: win.goTo("About") } }
             Text { x: 14; y: 32; text: backend.version; color: Tokens.text
                    font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: true }
             Text { x: 14; y: 54; textFormat: Text.RichText; color: Tokens.dim

@@ -26,6 +26,19 @@ Item {
                    onLinkActivated: function (l) { Qt.openUrlExternally(l) }
                    MouseArea { anchors.fill: parent; acceptedButtons: Qt.NoButton
                                cursorShape: parent.hoveredLink ? Qt.PointingHandCursor : Qt.ArrowCursor } }
+            Row {
+                spacing: 12
+                Pill { label: backend.update.state === "checking" ? "Checking..." : "Check for updates"
+                       onClicked: backend.checkUpdate() }
+                Pill { visible: backend.update.state === "available"; primary: true
+                       label: "Download and install " + backend.update.version
+                       onClicked: backend.installUpdate() }
+                Text { anchors.verticalCenter: parent.verticalCenter; color: Tokens.sub
+                       font.family: Tokens.font; font.pixelSize: Tokens.fsBody
+                       text: ({available: "A new version is available", none: "You have the latest version",
+                               downloading: "Downloading...", ready: "Installing - Lmonitor will restart",
+                               error: "Could not check: " + (backend.update.text || "")})[backend.update.state] || "" }
+            }
             Text { width: parent.width; wrapMode: Text.WordWrap; color: Tokens.dim
                    font.family: Tokens.font; font.pixelSize: Tokens.fsSmall
                    text: "This is the new interface. Sensors, sessions and the overlay come from the same engine as the classic window, and both share the same settings." }
