@@ -14,8 +14,10 @@
   /* ================================================================== */
 
   let state = load() || window.FinSeed.createSeed(new Date());
+  const IV = window.FinInvest;
+  if (!state.invest) state.invest = { txs: IV.seedTransactions(new Date()), answers: [null, null, null, null, null], threshold: 0.05 };
   const ui = {
-    view: 'home', goalId: null, hidden: false, cadence: 'weekly',
+    view: 'home', goalId: null, itab: 'dash', roadGoal: null, hidden: false, cadence: 'weekly',
     whatIf: { extra: 0, income: 0, lump: false, invest: false },
   };
 
@@ -230,10 +232,10 @@
       '</article>' +
 
       '<div class="actions">' +
-        '<button class="glass action press" data-go="assets">' + I.pie + 'مدیریت سبد</button>' +
+        '<button class="glass action press" data-action="itab-go" data-key="portfolio">' + I.pie + 'مدیریت سبد</button>' +
         '<button class="glass action press active" data-go="goals">' + I.target + 'هدف‌گذاری</button>' +
         '<button class="glass action press" data-action="deposit" data-id="' + (top ? top.goalId : '') + '">' + I.wallet + 'ثبت تراکنش</button>' +
-        '<button class="glass action press" data-toast="تحلیل بازار به‌زودی">' + I.bars + 'تحلیل بازار</button>' +
+        '<button class="glass action press" data-action="itab-go" data-key="market">' + I.bars + 'تحلیل بازار</button>' +
       '</div>' +
 
       '<div class="grid-2">' +
@@ -324,6 +326,11 @@
         '<div class="btn-row"><button class="btn primary" style="flex:1" data-action="deposit" data-id="' + hg.id + '">+ واریز</button>' +
         '<button class="btn ghost" style="flex:1" data-open="' + hg.id + '">مشاهده رودمپ</button></div>' +
         '</article>';
+
+      // 3D roadmap with goal switcher
+      const rg = ranked.find((x) => x.id === ui.roadGoal) || hg;
+      html += '<div class="road-tabs">' + ranked.map((x) => '<button class="' + (x.id === rg.id ? 'on' : '') + '" data-action="road-goal" data-id="' + x.id + '">' + esc(x.emoji || '🎯') + ' ' + esc(x.name) + '</button>').join('') + '</div>';
+      html += road3d(rg, P.plans[rg.id], 'مسیر سه‌بعدی «' + esc(rg.name) + '» 🧭');
 
       // capacity / engine summary
       const totalA = P.totalAllocated;
@@ -494,10 +501,10 @@
     return html;
   }
 
-  /* 3D roadmap: a winding path on a tilted plane, milestone pins stand upright */
-  function road3d(goal, p) {
-    const pts = [[150, 400], [70, 330], [235, 258], [70, 182], [228, 108], [150, 34]];
-    const ms = p.milestones;
+  /* 3D roadmap: winding road on a tilted plane with scenery; pins, trees, coins stand upright */
+  const ROAD_PTS = [[150, 400], [70, 330], [235, 258], [70, 182], [228, 108], [150, 34]];
+  function road3d(goal, p, head) {
+    const pts = ROAD_PTS, ms = p.milestones;
     let done = 0, f = 0;
     for (let i = 0; i < ms.length; i++) {
       if (ms[i].status === 'done') { done = i + 1; continue; }
@@ -507,21 +514,51 @@
     }
     const prog = Math.min(1, (done + f) / ms.length) * 100;
     const d = smoothPath(pts);
+    const up = (x, y, cls, inner, extra) => '<div class="sprite ' + cls + '" style="left:' + x + 'px;top:' + y + 'px;' + (extra || '') + '"><div class="pin-up">' + inner + '</div><i class="shadow"></i></div>';
     const pins = ms.map((m, i) => {
       const q = pts[i + 1];
+      const gift = m.badge && m.status !== 'done' ? '<span class="gift">🎁</span>' : '';
       return '<div class="pin ' + m.status + '" style="left:' + q[0] + 'px;top:' + q[1] + 'px">' +
-        '<div class="pin-up"><span class="orb">' + (m.pct === 100 ? goalVisual(goal) : (m.status === 'done' ? '✓' : faN(m.pct) + '٪')) + '</span>' +
+        '<div class="pin-up">' + gift + '<span class="orb">' + (m.pct === 100 ? goalVisual(goal) : (m.status === 'done' ? '✓' : faN(m.pct) + '٪')) + '</span>' +
         '<span class="lbl">' + (m.status === 'done' ? 'انجام شد' : jDate(m.date)) + '</span></div><i class="shadow"></i></div>';
     }).join('');
-    return '<article class="glass-dark card road3d-card"><div class="card-head"><h3 style="color:#fff">رودمپ سه‌بعدی 🧭</h3><span class="sub" style="color:rgba(255,255,255,.6)">' + pct(p.progress) + ' از مسیر</span></div>' +
-      '<div class="road3d"><div class="plane">' +
-      '<svg width="300" height="430" viewBox="0 0 300 430"><defs><linearGradient id="r3g" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#2fd9a6"/><stop offset="1" stop-color="#5ff0c4"/></linearGradient></defs>' +
-      '<path d="' + d + '" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="30" stroke-linecap="round"/>' +
-      '<path d="' + d + '" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="2" stroke-dasharray="6 9" stroke-linecap="round"/>' +
-      '<path class="road-prog" d="' + d + '" pathLength="100" fill="none" stroke="url(#r3g)" stroke-width="12" stroke-linecap="round" stroke-dasharray="' + prog.toFixed(1) + ' 100"/>' +
-      '<circle cx="150" cy="400" r="10" fill="#2fd9a6"/></svg>' + pins +
-      '<div class="pin start" style="left:150px;top:400px"><div class="pin-up"><span class="lbl">شروع</span></div></div>' +
+    const scenery =
+      up(28, 392, 'tree', '🌲') + up(272, 360, 'tree', '🌳') + up(22, 262, 'tree', '🌲') + up(285, 300, 'tree sm', '🌲') +
+      up(282, 205, 'tree', '🌳') + up(18, 140, 'tree sm', '🌲') + up(282, 56, 'tree sm', '🌲') + up(40, 52, 'tree', '🌳') +
+      up(118, 230, 'rock', '🪨') + up(190, 360, 'flower', '🌼') + up(110, 120, 'flower', '🌷') +
+      up(186, 24, 'flag', '🏁') + up(112, 30, 'spark', '✨') + up(196, 70, 'spark d2', '✨');
+    return '<article class="glass-dark card road3d-card"' + (head ? ' data-open="' + goal.id + '"' : '') + '>' +
+      '<div class="card-head"><h3 style="color:#fff">' + (head || 'رودمپ سه‌بعدی 🧭') + '</h3><span class="sub" style="color:rgba(255,255,255,.6)">' + pct(p.progress) + ' از مسیر</span></div>' +
+      '<div class="road3d" data-prog="' + prog.toFixed(2) + '">' +
+        '<div class="sky"><span class="star s1"></span><span class="star s2"></span><span class="star s3"></span><span class="moon"></span>' +
+        '<svg class="mountains" viewBox="0 0 400 90" preserveAspectRatio="none"><path d="M0 90 L60 30 L110 70 L170 10 L240 75 L300 25 L360 60 L400 40 L400 90Z" fill="rgba(47,217,166,.10)"/><path d="M0 90 L40 60 L90 80 L150 45 L210 85 L280 55 L340 82 L400 65 L400 90Z" fill="rgba(29,119,172,.22)"/></svg>' +
+        '<span class="cloud c1">☁️</span><span class="cloud c2">☁️</span><span class="cloud c3">☁️</span></div>' +
+        '<div class="plane">' +
+        '<svg width="300" height="430" viewBox="0 0 300 430"><defs><linearGradient id="r3g" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#2fd9a6"/><stop offset="1" stop-color="#5ff0c4"/></linearGradient></defs>' +
+        '<path d="' + d + '" fill="none" stroke="rgba(0,0,0,.25)" stroke-width="34" stroke-linecap="round" transform="translate(4 6)"/>' +
+        '<path d="' + d + '" fill="none" stroke="#2a4a66" stroke-width="30" stroke-linecap="round"/>' +
+        '<path d="' + d + '" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="2" stroke-dasharray="6 9" stroke-linecap="round"/>' +
+        '<path class="road-prog" d="' + d + '" pathLength="100" fill="none" stroke="url(#r3g)" stroke-width="12" stroke-linecap="round" stroke-dasharray="' + prog.toFixed(1) + ' 100"/>' +
+        '<circle cx="150" cy="400" r="10" fill="#2fd9a6"/></svg>' +
+        scenery + pins +
+        '<div class="pin start" style="left:150px;top:400px"><div class="pin-up"><span class="lbl">شروع</span></div></div>' +
+        '<div class="coins"></div>' +
+        '<div class="sprite walker" style="left:150px;top:400px"><div class="pin-up"><span class="me">' + AVATAR + '</span><span class="lbl you">تو اینجایی</span></div><i class="shadow"></i></div>' +
       '</div></div></article>';
+  }
+
+  /** After render: put the walker at the current progress and coins on the road ahead. */
+  function layoutRoad3d() {
+    document.querySelectorAll('.road3d').forEach((r) => {
+      const path = r.querySelector('.road-prog');
+      if (!path || !path.getTotalLength) return;
+      const L = path.getTotalLength(), prog = +r.dataset.prog;
+      const at = (pc) => path.getPointAtLength(L * pc / 100);
+      const w = r.querySelector('.walker'), pt = at(prog);
+      w.style.left = pt.x + 'px'; w.style.top = pt.y + 'px';
+      const coins = [8, 16, 30, 38, 46, 58, 66, 78, 86, 94].filter((c) => c > prog + 3);
+      r.querySelector('.coins').innerHTML = coins.map((c, i) => { const q = at(c); return '<div class="sprite coin" style="left:' + q.x + 'px;top:' + q.y + 'px;animation-delay:' + (i * 0.2) + 's"><div class="pin-up">🪙</div></div>'; }).join('');
+    });
   }
 
   function viewCompletedGoal(goal) {
@@ -886,6 +923,7 @@
       '<button class="btn light block" data-go="goals">🎯 اهداف من</button>' +
       '<button class="btn light block" data-go="achievements">🏆 دستاوردها و گزارش</button>' +
       '<button class="btn light block" data-go="assets">💼 وضعیت مالی</button>' +
+      '<button class="btn light block" data-go="invest">📈 سرمایه‌گذاری</button>' +
       '<button class="btn danger block" data-action="reset">↺ بازنشانی داده‌های نمونه</button></div>');
   }
 
@@ -978,7 +1016,173 @@
   /* Router + rendering                                                 */
   /* ================================================================== */
 
-  const VIEWS = { home: viewHome, goals: viewGoals, goal: viewGoal, achievements: viewAchievements, assets: viewAssets };
+
+  /* ================================================================== */
+  /* View: Investments (9 tabs)                                         */
+  /* ================================================================== */
+
+  const ITABS = [['dash', 'داشبورد'], ['risk', 'ریسک‌سنجی'], ['portfolio', 'سبد من'], ['cats', 'دسته‌ها'], ['market', 'بازار'],
+    ['signals', 'سیگنال‌ها'], ['compare', 'مقایسه'], ['rebal', 'بازتنظیم'], ['history', 'تاریخچه']];
+  const sgn = (x) => (x > 0 ? '+' : x < 0 ? '−' : '') + pct(Math.abs(x), 1);
+  const tone = (x) => (x > 0 ? 'mint' : x < 0 ? 'coral' : 'navy');
+  const srcLine = (src, at) => '<div class="src">📡 ' + esc(src) + ' · ' + new Date(at).toLocaleString('fa-IR-u-ca-persian', { dateStyle: 'medium', timeStyle: 'short' }) + '</div>';
+
+  function investCtx() {
+    const m = IV.MARKET;
+    const P = plan();
+    const a = P.analysis;
+    const pf = IV.holdings(state.invest.txs, m);
+    const months = P.ranked.map((g) => P.plans[g.id].monthsLeft);
+    const finance = { emergencyRatio: a.emergencyRatio, savingsRate: a.savingsRate, debtRatio: a.income ? a.debtPayments / a.income : 0, nearestGoalMonths: months.length ? Math.min.apply(null, months) : null };
+    const risk = IV.riskProfile(state.invest.answers, finance);
+    return { m, pf, risk, finance, a };
+  }
+
+  function classBars(map, target) {
+    return '<div class="cls-bars">' + Object.keys(IV.CLASSES).map((k) => {
+      const c = IV.CLASSES[k];
+      return '<div class="r"><span><i style="background:' + c.color + '"></i>' + c.name + '</span><div class="track"><b style="width:' + (map[k] * 100).toFixed(1) + '%;background:' + c.color + '"></b>' +
+        (target ? '<em style="right:' + (target[k] * 100).toFixed(1) + '%"></em>' : '') + '</div><small>' + pct(map[k]) + (target ? ' / ' + pct(target[k]) : '') + '</small></div>';
+    }).join('') + '</div>';
+  }
+
+  function viewInvest() {
+    const C = investCtx(), m = C.m, pf = C.pf, risk = C.risk;
+    let h = '<section class="view">' + topbar('سرمایه‌گذاری', 'home', '<button class="icon-btn" data-action="trade" aria-label="ثبت معامله">' + I.plus + '</button>');
+    h += '<div class="itabs">' + ITABS.map((t) => '<button class="' + (ui.itab === t[0] ? 'on' : '') + '" data-action="itab" data-key="' + t[0] + '">' + t[1] + '</button>').join('') + '</div>';
+    h += '<div class="disclaimer">ℹ️ هیچ بازدهی تضمین‌شده نیست. ' + (m.sample ? '<b>داده‌های بازار نمونه هستند</b> و برای اتصال به فید واقعی آماده‌اند. ' : '') + 'تصمیم نهایی خرید و فروش همیشه با خودت است.</div>';
+    const T = ui.itab;
+
+    if (T === 'dash') {
+      const sugg = IV.suggestions(pf, risk, C.finance);
+      h += '<article class="glass-dark card inv-hero"><div class="sub" style="color:rgba(255,255,255,.65)">ارزش خالص سبد (پس از کسر کارمزد فروش)</div>' +
+        '<div class="big num">' + toman(pf.total) + '</div>' +
+        '<div class="chips" style="justify-content:flex-start;display:flex;gap:6px;flex-wrap:wrap"><span class="pill ' + tone(pf.unrealized) + '">' + sgn(pf.returnPct) + '</span><span class="sub" style="color:rgba(255,255,255,.7)">سود/زیان تحقق‌نیافته ' + signed(pf.unrealized) + ' · تحقق‌یافته ' + signed(pf.realized) + '</span></div>' +
+        '<div class="kpis" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px"><div class="kpi"><small>بهای تمام‌شده</small><b class="num">' + compact(pf.cost) + '</b></div><div class="kpi"><small>پروفایل ریسک</small><b>' + (risk.complete ? risk.name : 'نامشخص') + '</b></div><div class="kpi"><small>کارمزدهای پرداختی</small><b class="num">' + compact(pf.fees) + '</b></div></div></article>';
+      h += '<article class="glass card"><div class="card-head"><h3>ترکیب سبد</h3>' + (risk.complete ? '<span class="sub">خط = هدف «' + risk.name + '»</span>' : '') + '</div>' + classBars(pf.byClass, risk.complete ? risk.target : null) + '</article>';
+      h += '<article class="glass card"><div class="card-head"><h3>پیشنهادهای هوشمند</h3><span class="sub">توضیحی، نه دستور خرید</span></div>' + sugg.map((x) => '<div class="sugg ' + x.tone + '"><span>' + x.icon + '</span><div><b>' + x.title + '</b><p>' + x.text + '</p></div></div>').join('') + '</article>';
+    }
+
+    if (T === 'risk') {
+      const ans = state.invest.answers;
+      h += '<article class="glass card"><div class="card-head"><h3>پرسشنامه تحمل ریسک</h3><span class="sub">' + faN(ans.filter((x) => x != null).length) + ' از ' + faN(IV.QUESTIONS.length) + '</span></div>' +
+        IV.QUESTIONS.map((q, i) => '<div class="quiz"><p>' + faN(i + 1) + '. ' + q.q + '</p><div class="opts">' + q.a.map((o, j) => '<button class="' + (ans[i] === j ? 'on' : '') + '" data-action="answer" data-q="' + i + '" data-a="' + j + '">' + o + '</button>').join('') + '</div></div>').join('') + '</article>';
+      if (risk.complete) {
+        h += '<article class="glass-dark card"><div class="card-head"><h3 style="color:#fff">نتیجه: ' + risk.name + '</h3></div>' +
+          '<div class="meter"><span>تحمل روانی</span><div><i style="width:' + risk.tolerance + '%"></i></div><b>' + faN(risk.tolerance) + '</b></div>' +
+          '<div class="meter"><span>توان مالی</span><div><i style="width:' + risk.capacity + '%;background:#1d77ac"></i></div><b>' + faN(risk.capacity) + '</b></div>' +
+          '<p class="sub" style="color:rgba(255,255,255,.7);line-height:1.9">پروفایل نهایی از <b>کمترِ این دو</b> ساخته می‌شود؛ ' + (risk.limitedBy === 'capacity' ? 'این‌جا وضعیت مالی‌ات (صندوق اضطراری، پس‌انداز، بدهی، افق اهداف) محدودکننده است، نه روحیه‌ات.' : 'این‌جا تحمل روانی‌ات محدودکننده است.') + '</p></article>' +
+          '<article class="glass card"><div class="card-head"><h3>تخصیص هدف</h3></div>' + classBars(risk.target) + '</article>';
+      } else h += '<article class="glass card empty">📝 به همه سؤال‌ها جواب بده تا پروفایل ساخته شود. تا آن موقع پیشنهاد ترکیب سبد صادر نمی‌شود.</article>';
+    }
+
+    if (T === 'portfolio') {
+      h += pf.list.map((x) => '<article class="glass card hold"><div class="hold-top"><div><b>' + esc(x.name) + '</b>' + (x.external ? ' <span class="pill rtl navy">خارج از اپ</span>' : '') + '<br><small class="sub num">' + faN(x.qty, 2) + ' ' + x.unit + ' · میانگین خرید ' + compact(x.avg) + '</small></div>' +
+        '<div style="text-align:left"><b class="num">' + compact(x.value) + '</b><br><span class="pill ' + tone(x.unrealized) + '">' + sgn(x.changePct) + '</span></div></div>' +
+        '<div class="hold-grid"><span>قیمت فعلی <b class="num">' + compact(x.price) + '</b></span><span>سود/زیان <b class="num">' + signed(x.unrealized) + '</b></span><span>سهم <b>' + pct(x.weight) + '</b></span><span>تحقق‌یافته <b class="num">' + signed(x.realized) + '</b></span></div>' +
+        '<div class="btn-row" style="margin-top:10px"><button class="btn sm light" style="flex:1" data-action="trade" data-asset="' + x.asset + '" data-side="buy">خرید</button><button class="btn sm danger" style="flex:1" data-action="trade" data-asset="' + x.asset + '" data-side="sell">فروش</button></div>' +
+        srcLine(x.source, m.asOf) + '</article>').join('') +
+        '<button class="btn primary block" data-action="trade">+ ثبت خرید / دارایی خارج از اپ</button>';
+    }
+
+    if (T === 'cats') {
+      h += Object.keys(IV.CLASSES).map((k) => {
+        const c = IV.CLASSES[k], items = Object.keys(IV.ASSETS).filter((a) => IV.ASSETS[a].cls === k);
+        return '<article class="glass card"><div class="card-head"><h3><i class="dotc" style="background:' + c.color + '"></i>' + c.name + '</h3><span class="riskdots">' + [1, 2, 3, 4, 5].map((n) => '<i class="' + (n <= c.risk ? 'on' : '') + '"></i>').join('') + '</span></div>' +
+          items.map((a) => { const A = IV.ASSETS[a]; return '<div class="cat-row"><b>' + A.name + '</b><span>نقدشوندگی: ' + A.liquidity + ' · کارمزد ~' + pct(A.fee, 1) + (A.taxNote ? ' · ' + A.taxNote : '') + '</span></div>'; }).join('') +
+          '<div class="sub">سهم در سبد تو: ' + pct(pf.byClass[k]) + '</div></article>';
+      }).join('');
+    }
+
+    if (T === 'market') {
+      const iv = IV.intrinsic(m);
+      const row = (name, x, extra) => '<div class="mrow"><div><b>' + name + '</b><small>' + esc(x.source) + '</small></div><div class="num">' + fa(x.sell) + '<small>خرید ' + fa(x.buy) + ' · اختلاف ' + pct(IV.spread(x), 1) + '</small></div><span class="pill ' + tone(x.ch24) + '">' + sgn(x.ch24 / 100) + '</span>' + (extra || '') + '</div>';
+      h += '<article class="glass card"><div class="card-head"><h3>ارز</h3><span class="tag-h">داده تاریخی/لحظه‌ای</span></div>' + Object.keys(m.fx).map((k) => row(m.fx[k].name, m.fx[k])).join('') + srcLine('فید ارز', m.asOf) + '</article>';
+      h += '<article class="glass card"><div class="card-head"><h3>بازار جهانی</h3></div>' + Object.keys(m.global).map((k) => { const x = m.global[k]; return '<div class="mrow"><div><b>' + x.name + '</b><small>' + esc(x.source) + '</small></div><div class="num">$' + x.usd.toLocaleString('en-US') + '</div><span class="pill ' + tone(x.ch24) + '">' + sgn(x.ch24 / 100) + '</span></div>'; }).join('') + '</article>';
+      h += '<article class="glass card"><div class="card-head"><h3>بازار داخلی و حباب</h3><span class="sub">ارزش ذاتی = جهانی × نرخ ارز</span></div>' +
+        ['gold18', 'coin', 'silver', 'copper'].map((k) => { const x = m.domestic[k], v = iv[k]; return '<div class="mrow"><div><b>' + x.name + '</b><small>ارزش ذاتی ' + fa(v.iv) + '</small></div><div class="num">' + fa(x.sell) + '<small>اختلاف خرید/فروش ' + pct(IV.spread(x), 1) + '</small></div><span class="pill ' + (Math.abs(v.bubble) < 0.04 ? 'navy' : v.bubble > 0 ? 'coral' : 'mint') + '">حباب ' + sgn(v.bubble) + '</span></div>'; }).join('') +
+        '<p class="sub" style="line-height:1.9">برای طلا و نقره و مس، قیمت جهانی کافی نیست: نرخ دلار داخلی، عیار، اجرت، کارمزد و اختلاف خرید/فروش هم حساب شده‌اند.</p>' + srcLine('محاسبه از فیدها', m.asOf) + '</article>';
+      const rr = IV.realRate(m);
+      h += '<article class="glass card"><div class="card-head"><h3>شاخص‌های کلان</h3></div><div class="kpi-grid"><div class="kpi"><small>تورم</small><b>' + pct(m.macro.inflation) + '</b></div><div class="kpi"><small>سود سپرده</small><b>' + pct(m.macro.depositRate) + '</b></div><div class="kpi"><small>نرخ بهره واقعی</small><b style="color:' + (rr < 0 ? 'var(--coral-2)' : 'var(--mint-3)') + '">' + sgn(rr) + '</b></div><div class="kpi"><small>منبع</small><b style="font-size:11px">' + esc(m.macro.inflationSource) + '</b></div></div></article>';
+    }
+
+    if (T === 'signals') {
+      const TT = { opportunity: ['فرصت احتمالی', 'mint'], caution: ['احتیاط', 'coral'], neutral: ['قابل توجه', 'navy'] };
+      h += '<div class="disclaimer" style="background:rgba(29,119,172,.1)">🔎 سیگنال‌ها پیش‌بینی قطعی قیمت نیستند؛ شرایط بازار را برای تصمیم آگاهانه‌تر نشان می‌دهند.</div>';
+      h += IV.signals(m).map((x) => '<article class="glass card signal"><div class="card-head"><h3>' + esc(x.title) + '</h3><span class="pill rtl ' + TT[x.type][1] + '">' + TT[x.type][0] + '</span></div>' +
+        '<div class="sub" style="margin-bottom:6px">' + esc(x.asset) + '</div><p><b>دلیل:</b> ' + esc(x.reason) + '</p>' + (x.alt ? '<p><b>نکته:</b> ' + esc(x.alt) + '</p>' : '') +
+        '<div class="meter light"><span>سطح اطمینان</span><div><i style="width:' + (x.confidence * 100) + '%"></i></div><b>' + pct(x.confidence) + '</b></div>' + srcLine(x.source, x.asOf) + '</article>').join('');
+    }
+
+    if (T === 'compare') {
+      const rows = IV.compare(pf, m), max = Math.max.apply(null, rows.map((r) => Math.abs(r.ret))) || 1;
+      h += '<article class="glass card"><div class="card-head"><h3>عملکرد ۱۲ ماه گذشته</h3><span class="tag-h">داده تاریخی</span></div>' +
+        rows.map((r) => '<div class="cmp ' + (r.mine ? 'mine' : '') + '"><span>' + r.name + '</span><div><i style="width:' + (Math.abs(r.ret) / max * 100) + '%"></i></div><b>' + sgn(r.ret) + '</b></div>').join('') +
+        '<p class="sub" style="line-height:1.9">بازده سبد از زمان خرید و پس از کسر کارمزد ورود و خروج است. ' + (pf.returnPct < m.history12m.inflation ? '⚠️ بازده سبدت از تورم کمتر بوده؛ یعنی قدرت خریدش کم شده.' : '✅ بازده سبدت از تورم بیشتر بوده.') + '</p>' + srcLine('بانک داده تاریخی', m.asOf) + '</article>';
+    }
+
+    if (T === 'rebal') {
+      const rb = IV.rebalance(pf, risk, state.invest.threshold);
+      if (!rb.ready) h += '<article class="glass card empty">⚖️ برای بازتنظیم، اول پرسشنامه ریسک را کامل کن.<br><br><button class="btn primary" data-action="itab" data-key="risk">ریسک‌سنجی</button></article>';
+      else {
+        h += '<article class="glass card"><div class="card-head"><h3>فاصله از تخصیص هدف</h3><span class="sub">بیشترین انحراف ' + pct(rb.drift) + '</span></div>' + classBars(pf.byClass, risk.target) +
+          '<div class="seg" style="margin-top:12px">' + [0.03, 0.05, 0.1].map((t) => '<button class="' + (state.invest.threshold === t ? 'on' : '') + '" data-action="threshold" data-key="' + t + '">آستانه ' + pct(t) + '</button>').join('') + '</div></article>';
+        h += '<article class="glass card"><div class="card-head"><h3>پیشنهاد اصلاح</h3></div>' + (rb.moves.length ? rb.moves.map((x) => '<div class="sugg ' + (x.action === 'sell' ? 'coral' : 'mint') + '"><span>' + (x.action === 'sell' ? '➖' : '➕') + '</span><div><b>' + (x.action === 'sell' ? 'کاهش ' : 'افزایش ') + x.name + '</b><p>حدود ' + toman(x.amount) + ' (از ' + pct(x.current) + ' به ' + pct(x.target) + ')</p></div></div>').join('') +
+          '<p class="sub" style="line-height:1.9">هزینه تخمینی جابه‌جایی (کارمزد + اختلاف خرید/فروش): <b class="num">' + toman(rb.estCost) + '</b>. اگر این هزینه زیاد است، بازتنظیم را با واریزهای جدید انجام بده نه با فروش.</p>' : '<p>✅ سبدت در محدوده‌ی آستانه است.</p>') + '</article>';
+      }
+    }
+
+    if (T === 'history') {
+      const txs = state.invest.txs.slice().sort((a, b) => new Date(b.date) - new Date(a.date));
+      h += '<article class="glass card"><div class="card-head"><h3>تاریخچه معاملات</h3><span class="sub">' + faN(txs.length) + ' معامله</span></div><ul class="history">' +
+        txs.map((t) => '<li><span class="hi" style="background:' + (t.side === 'buy' ? 'rgba(47,217,166,.16)' : 'rgba(255,122,102,.16)') + '">' + (t.side === 'buy' ? '⬇️' : '⬆️') + '</span><div class="txt">' + (t.side === 'buy' ? 'خرید ' : 'فروش ') + IV.ASSETS[t.asset].name + (t.external ? ' <span class="pill rtl navy">خارج از اپ</span>' : '') +
+          '<br><small class="num">' + faN(t.qty, 2) + ' × ' + fa(t.price) + ' · کارمزد ' + fa(t.fee) + ' · ' + jDay(t.date) + '</small></div><button class="link sub" data-action="del-tx" data-id="' + t.id + '">×</button></li>').join('') + '</ul></article>';
+    }
+    return h + '</section>';
+  }
+
+  function tradeSheet(asset, side) {
+    const m = IV.MARKET, pf = IV.holdings(state.invest.txs, m);
+    asset = asset || 'goldfund'; side = side || 'buy';
+    openSheet('<h2>ثبت معامله</h2><form id="trade-form">' +
+      '<div class="seg" id="side-seg" style="margin-bottom:14px"><button type="button" data-side="buy" class="' + (side === 'buy' ? 'on' : '') + '">خرید</button><button type="button" data-side="sell" class="' + (side === 'sell' ? 'on' : '') + '">فروش</button></div>' +
+      '<div class="field"><label>دارایی</label><select class="input" name="asset">' + Object.keys(IV.ASSETS).map((k) => '<option value="' + k + '" ' + (k === asset ? 'selected' : '') + '>' + IV.ASSETS[k].name + '</option>').join('') + '</select></div>' +
+      '<div class="row-2"><div class="field"><label>مقدار</label><input class="input" name="qty" inputmode="decimal" required></div><div class="field"><label>قیمت واحد</label><input class="input money" name="price" inputmode="numeric" required></div></div>' +
+      '<div class="field"><label>کارمزد</label><input class="input money" name="fee" inputmode="numeric"><div class="hint" id="trade-hint"></div></div>' +
+      '<label class="toggle" style="border:0"><div>دارایی خارج از اپلیکیشن<small>مثلاً طلای فیزیکی یا حساب کارگزاری دیگر</small></div><span class="switch"><input type="checkbox" name="external"><span></span></span></label>' +
+      '<div class="preview-box" id="trade-prev"></div><button class="btn primary block" type="submit">ثبت</button></form>', (sh) => {
+      const f = sh.querySelector('#trade-form');
+      let sd = side;
+      const fill = () => {
+        const A = IV.ASSETS[f.asset.value], q = A.q(m);
+        f.price.value = fa(sd === 'buy' ? q.buy : q.sell);
+        const held = pf.list.find((x) => x.asset === f.asset.value);
+        sh.querySelector('#trade-hint').textContent = 'کارمزد معمول ~' + pctT(A.fee, 1) + ' · قیمت از ' + q.source + (held ? ' · موجودی: ' + faN(held.qty, 2) + ' ' + A.unit : '');
+        calc();
+      };
+      const calc = () => {
+        const A = IV.ASSETS[f.asset.value], qty = parseFloat(String(f.qty.value).replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d))) || 0, pr = parseMoney(f.price.value);
+        const fee = Math.round(qty * pr * A.fee);
+        if (document.activeElement !== f.fee) f.fee.value = fee ? fa(fee) : '';
+        sh.querySelector('#trade-prev').innerHTML = 'مبلغ کل: <b class="num">' + toman(qty * pr + (sd === 'buy' ? 1 : -1) * parseMoney(f.fee.value)) + '</b>';
+      };
+      sh.querySelector('#side-seg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; sd = b.dataset.side; sh.querySelectorAll('#side-seg button').forEach((x) => x.classList.toggle('on', x === b)); fill(); });
+      f.asset.addEventListener('change', fill);
+      f.addEventListener('input', (e) => { if (e.target.name === 'price' || e.target.name === 'fee') liveMoney(e.target); calc(); });
+      f.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const qty = parseFloat(String(f.qty.value).replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)));
+        if (!(qty > 0)) { toast('مقدار را وارد کن'); return; }
+        const held = pf.list.find((x) => x.asset === f.asset.value);
+        if (sd === 'sell' && (!held || qty > held.qty + 1e-9)) { toast('بیشتر از موجودی‌ات نمی‌توانی بفروشی'); return; }
+        state.invest.txs.push({ id: 't' + Date.now().toString(36), asset: f.asset.value, side: sd, qty, price: parseMoney(f.price.value), fee: parseMoney(f.fee.value), date: now().toISOString(), external: f.external.checked });
+        save(); closeSheet(); ui.view = 'invest'; ui.itab = 'portfolio'; render(); toast('معامله ثبت شد');
+      });
+      fill();
+    });
+  }
+
+  const VIEWS = { invest: viewInvest, home: viewHome, goals: viewGoals, goal: viewGoal, achievements: viewAchievements, assets: viewAssets };
 
   function render() {
     const phone = document.getElementById('phone');
@@ -1000,6 +1204,7 @@
     requestAnimationFrame(() => requestAnimationFrame(() => {
       document.querySelectorAll('.ring-anim').forEach((c) => { c.style.strokeDashoffset = c.dataset.off; });
       layoutRoadmap();
+      layoutRoad3d();
     }));
     if (ui.view === 'goal') updateWhatIf();
   }
@@ -1149,6 +1354,13 @@
         state.goals = state.goals.filter((g) => g.id !== id);
         normalizeRanks(); save(); go('goals'); toast('هدف حذف شد'); break;
       }
+      case 'itab-go': ui.itab = t.dataset.key; go('invest'); break;
+      case 'itab': ui.itab = t.dataset.key; render(); document.getElementById('scroll').scrollTop = 0; break;
+      case 'trade': tradeSheet(t.dataset.asset, t.dataset.side); break;
+      case 'answer': state.invest.answers[+t.dataset.q] = +t.dataset.a; save(); render(); break;
+      case 'threshold': state.invest.threshold = +t.dataset.key; save(); render(); break;
+      case 'del-tx': if (confirm('این معامله حذف شود؟')) { state.invest.txs = state.invest.txs.filter((x) => x.id !== id); save(); render(); } break;
+      case 'road-goal': e.stopPropagation(); ui.roadGoal = id; render(); break;
       case 'cadence': ui.cadence = t.dataset.key; render(); break;
       case 'whatif-reset': resetWhatIf(); render(); break;
       case 'sim': {
