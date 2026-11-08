@@ -594,3 +594,41 @@ input[type=range] { width: 100%; accent-color: var(--mint-2); margin-top: 10px; 
 /* view transitions */
 .view { animation: viewIn .45s var(--ease); }
 @keyframes viewIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+/* ---------------------------------------------------------------------
+   3D roadmap
+   --------------------------------------------------------------------- */
+.road3d-card { padding-bottom: 6px; background: linear-gradient(160deg, rgba(13,51,82,.92), rgba(7,29,51,.88)) !important; }
+.road3d { height: 370px; perspective: 800px; perspective-origin: 50% 10%; display: grid; justify-content: center; overflow: hidden; }
+.road3d .plane {
+  position: relative; width: 300px; height: 430px; margin-top: -70px;
+  transform-style: preserve-3d; transform: rotateX(58deg) rotateZ(var(--rz, 0deg));
+  border-radius: 40px;
+  background: radial-gradient(60% 50% at 50% 60%, rgba(47,217,166,.16), transparent 70%),
+              repeating-linear-gradient(0deg, rgba(255,255,255,.05) 0 1px, transparent 1px 30px),
+              repeating-linear-gradient(90deg, rgba(255,255,255,.05) 0 1px, transparent 1px 30px);
+  animation: sway 9s ease-in-out infinite alternate;
+}
+@keyframes sway { from { --rz: -6deg; transform: rotateX(58deg) rotateZ(-6deg); } to { transform: rotateX(58deg) rotateZ(6deg); } }
+.road3d svg { position: absolute; inset: 0; }
+.road-prog { filter: drop-shadow(0 0 6px rgba(47,217,166,.8)); transition: stroke-dasharray 1.2s var(--ease); }
+.pin { position: absolute; width: 0; height: 0; transform-style: preserve-3d; }
+.pin .pin-up {
+  position: absolute; left: 0; bottom: 0; transform-origin: 50% 100%;
+  transform: translateX(-50%) rotateX(-58deg); display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+.pin .shadow { position: absolute; left: -16px; top: -6px; width: 32px; height: 12px; border-radius: 50%; background: rgba(0,0,0,.35); filter: blur(3px); }
+.pin .orb {
+  width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; font-weight: 900; font-size: 12.5px; color: #fff;
+  background: radial-gradient(circle at 32% 28%, rgba(255,255,255,.55), rgba(255,255,255,.08) 45%, rgba(18,66,102,.9));
+  border: 1px solid rgba(255,255,255,.35); box-shadow: 0 10px 20px rgba(0,0,0,.35);
+  order: -1;
+}
+.pin .orb .emoji { font-size: 22px; }
+.pin .orb img { width: 80%; height: 80%; border-radius: 50%; object-fit: cover; }
+.pin.done .orb { background: radial-gradient(circle at 32% 28%, #c9ffee, #2fd9a6 45%, #12a37b); color: var(--navy-900); }
+.pin.current .orb { box-shadow: 0 0 0 6px rgba(47,217,166,.25), 0 0 24px rgba(47,217,166,.7); animation: hop 1.6s ease-in-out infinite; }
+@keyframes hop { 50% { transform: translateY(-6px); } }
+.pin .lbl { font-size: 10.5px; font-weight: 700; color: #fff; white-space: nowrap; padding: 2px 8px; border-radius: 999px; background: rgba(7,29,51,.55); }
+.pin.start .lbl { background: var(--mint); color: var(--navy-900); }
+@media (prefers-reduced-motion: reduce) { .road3d .plane, .pin.current .orb { animation: none; } }

@@ -462,6 +462,9 @@
       '<div class="cadence"><div><span class="sub">' + ({ daily: 'هر روز کنار بگذار', weekly: 'هر هفته کنار بگذار', monthly: 'هر ماه کنار بگذار' })[ui.cadence] + '</span><br><b class="num">' + toman(p.cadence[ui.cadence]) + '</b></div><span style="font-size:34px">' + ({ daily: '☕', weekly: '🪙', monthly: '💰' })[ui.cadence] + '</span></div>' +
       '</article>';
 
+    // ---- 3D roadmap
+    html += road3d(goal, p);
+
     // ---- roadmap
     const cur = p.milestones.find((m) => m.status === 'current');
     html += '<article class="glass card"><div class="card-head"><h3>رودمپ اختصاصی 🗺️</h3><span class="sub">' + (cur ? 'مرحله بعد: ' + faN(cur.pct) + '٪' : 'همه مراحل انجام شد') + '</span></div>' +
@@ -489,6 +492,36 @@
     html += '<div style="display:flex;gap:10px;margin:6px 0 90px"><button class="btn danger block" data-action="complete-goal" data-id="' + goal.id + '">خریدمش! 🎉</button><button class="btn danger block" data-action="delete-goal" data-id="' + goal.id + '">' + I.trash + ' حذف</button></div>';
     html += '</section>';
     return html;
+  }
+
+  /* 3D roadmap: a winding path on a tilted plane, milestone pins stand upright */
+  function road3d(goal, p) {
+    const pts = [[150, 400], [70, 330], [235, 258], [70, 182], [228, 108], [150, 34]];
+    const ms = p.milestones;
+    let done = 0, f = 0;
+    for (let i = 0; i < ms.length; i++) {
+      if (ms[i].status === 'done') { done = i + 1; continue; }
+      const prev = i ? ms[i - 1].amount : 0;
+      f = Math.max(0, Math.min(1, (goal.saved - prev) / (ms[i].amount - prev || 1)));
+      break;
+    }
+    const prog = Math.min(1, (done + f) / ms.length) * 100;
+    const d = smoothPath(pts);
+    const pins = ms.map((m, i) => {
+      const q = pts[i + 1];
+      return '<div class="pin ' + m.status + '" style="left:' + q[0] + 'px;top:' + q[1] + 'px">' +
+        '<div class="pin-up"><span class="orb">' + (m.pct === 100 ? goalVisual(goal) : (m.status === 'done' ? '✓' : faN(m.pct) + '٪')) + '</span>' +
+        '<span class="lbl">' + (m.status === 'done' ? 'انجام شد' : jDate(m.date)) + '</span></div><i class="shadow"></i></div>';
+    }).join('');
+    return '<article class="glass-dark card road3d-card"><div class="card-head"><h3 style="color:#fff">رودمپ سه‌بعدی 🧭</h3><span class="sub" style="color:rgba(255,255,255,.6)">' + pct(p.progress) + ' از مسیر</span></div>' +
+      '<div class="road3d"><div class="plane">' +
+      '<svg width="300" height="430" viewBox="0 0 300 430"><defs><linearGradient id="r3g" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#2fd9a6"/><stop offset="1" stop-color="#5ff0c4"/></linearGradient></defs>' +
+      '<path d="' + d + '" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="30" stroke-linecap="round"/>' +
+      '<path d="' + d + '" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="2" stroke-dasharray="6 9" stroke-linecap="round"/>' +
+      '<path class="road-prog" d="' + d + '" pathLength="100" fill="none" stroke="url(#r3g)" stroke-width="12" stroke-linecap="round" stroke-dasharray="' + prog.toFixed(1) + ' 100"/>' +
+      '<circle cx="150" cy="400" r="10" fill="#2fd9a6"/></svg>' + pins +
+      '<div class="pin start" style="left:150px;top:400px"><div class="pin-up"><span class="lbl">شروع</span></div></div>' +
+      '</div></div></article>';
   }
 
   function viewCompletedGoal(goal) {
