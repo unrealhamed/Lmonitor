@@ -1,8 +1,9 @@
 import os as _os
 import sys, io, contextlib, time, subprocess, textwrap, json
 sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
-with contextlib.redirect_stdout(io.StringIO()):
-    from t_helpers import load, boot, flush, OUT
+sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "stubs"))
+sys.modules["tkinter"] = None
+import lmonitor.engine as m
 ok = bad = 0
 def chk(name, cond):
     global ok, bad
@@ -14,7 +15,6 @@ import re
 chk("engine/backend import no tkinter, PIL, pystray or Qt at module level",
     not re.search(r"^(import|from)\s+(tkinter|PIL|pystray|PySide6|PyQt)", src, re.M))
 # 2) headless backend with tkinter blocked
-m = load()
 sys.modules["tkinter"] = None   # any later 'import tkinter' now fails
 from lmonitor.backend import Backend
 b = Backend()
@@ -52,7 +52,7 @@ chk("warning colors are kept, normal values use the chosen value color", cols["g
 chk("missing reading shows --, never a number", {i["key"]: i["text"] for g in v["groups"] for i in g["items"]}["g_temp"] == "--")
 b.settings.reset()
 chk("settings go through the engine's validation", b.set_setting("text", 99) and b.settings["text"] == 18 and b.set_setting("pos", "evil") and b.settings["pos"] == "left" and b.set_setting("bogus", 1) is False)
-chk("hardware tabs and charts are plain data", all(isinstance(b.hardware(i), list) for i in range(6)) and len(b.charts()) == 5)
+chk("hardware tabs are plain data", all(isinstance(b.hardware(i), list) for i in range(6)))
 cols = b.hardware_sections(0)
 chk("hardware sections: two columns of {title, rows}", len(cols) == 2 and all(isinstance(x["title"], str) and isinstance(x["rows"], list) for c in cols for x in c) and sum(len(c) for c in cols) >= 2)
 chk("every hardware tab splits into sections without error", all(len(b.hardware_sections(i)) == 2 for i in range(6)))

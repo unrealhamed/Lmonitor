@@ -95,7 +95,7 @@ class Bridge(QObject):
                 d = ({"state": "available", "version": self._info["version"]} if self._info
                      else {"state": "none"})
         except Exception as e:
-            d = {"state": "error", "text": str(e) or type(e).__name__}
+            d = {"state": "error", "text": ("Download failed: " if download else "Could not check: ") + (str(e) or type(e).__name__)}
         self._update_done.emit(d)
 
     @Slot()
@@ -127,6 +127,7 @@ class Bridge(QObject):
 
     def _loop(self):
         while not self._stop.is_set():
+            started = time.monotonic()
             try:
                 self._b.sample()
                 if self._ui_visible:            # nobody sees it otherwise: skip the work
@@ -134,7 +135,9 @@ class Bridge(QObject):
             except Exception:
                 Logger.error("qt sampler")
             busy = self._ui_visible or (self.host is not None and self.host.wanted())
-            self._wake.wait(self._b.telemetry.interval if busy else self.HIDDEN_PERIOD)
+            period = self._b.telemetry.interval if busy else self.HIDDEN_PERIOD
+            # the time spent reading counts, so the readings stay evenly spaced
+            self._wake.wait(max(0.05, period - (time.monotonic() - started)))
             self._wake.clear()
 
     def _overlay_loop(self):
@@ -219,9 +222,13 @@ class Bridge(QObject):
                 self._on_sampled(d)
 
     # ---- performance charts
-    @Slot(result="QVariantList")
-    def charts(self):
-        return self._b.charts()
+    @Slot(int, result="QVariantMap")
+    def graphs(self, seconds):
+        return self._b.graph_series(seconds)
+
+    @Slot(bool)
+    def setGraphsOpen(self, on):
+        self._b.graph_fans = bool(on)
 
     # ---- hardware page (cached telemetry rows)
     @Property("QStringList", constant=True)

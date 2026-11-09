@@ -9,7 +9,7 @@ Card {
     property string title: ""
     property var rows: []
     height: 60 + body.implicitHeight
-    Text { x: 20; y: 16; visible: sec.title !== ""; text: sec.title; color: Tokens.accent
+    Text { x: 20; y: 16; visible: sec.title !== ""; text: Tr.t(sec.title); color: Tokens.accent
            width: parent.width - 40; elide: Text.ElideRight
            font.family: Tokens.font; font.pixelSize: 15; font.bold: true }
     Column {
@@ -22,14 +22,14 @@ Card {
                 height: Math.max(val.implicitHeight, 20) + 12
                 Rectangle { visible: index > 0; width: parent.width; height: 1; color: "#1e1e23" }
                 Text { visible: modelData.b === ""; x: 0; y: 8; width: parent.width; wrapMode: Text.Wrap
-                       text: modelData.a; color: Tokens.sub
+                       text: Tr.t(modelData.a); color: Tokens.sub
                        font.family: Tokens.font; font.pixelSize: Tokens.fsBody }
-                Text { visible: modelData.b !== ""; x: 0; y: 8; width: parent.width * 0.38; text: modelData.a
+                Text { visible: modelData.b !== ""; x: 0; y: 8; width: parent.width * 0.38; text: Tr.t(modelData.a)
                        color: Tokens.dim; elide: Text.ElideRight
                        font.family: Tokens.font; font.pixelSize: Tokens.fsBody }
                 Text { id: val; visible: modelData.b !== ""; x: parent.width * 0.40; y: 8; width: parent.width * 0.60
                        horizontalAlignment: Text.AlignRight; wrapMode: Text.Wrap
-                       text: modelData.b
+                       text: Tr.t(modelData.b)
                        color: modelData.kind === "row" && typeof modelData.c === "string" && modelData.c.charAt(0) === "#" ? modelData.c : Tokens.text
                        font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: true }
                 Rectangle { visible: modelData.kind === "bar" && modelData.c !== null

@@ -10,9 +10,9 @@ Item {
     height: 58
     Column {
         anchors.verticalCenter: parent.verticalCenter; spacing: 0
-        Text { text: root.kicker; color: Tokens.sub; visible: text !== ""
+        Text { text: Tr.t(root.kicker); color: Tokens.sub; visible: text !== ""
                font.family: Tokens.font; font.pixelSize: Tokens.fsBody }
-        Text { text: root.title; color: Tokens.text
+        Text { text: Tr.t(root.title); color: Tokens.text
                font.family: Tokens.font; font.pixelSize: 30; font.bold: true }
     }
     Row { id: rightSide; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter

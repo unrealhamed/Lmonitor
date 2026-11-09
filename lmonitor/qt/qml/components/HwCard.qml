@@ -27,7 +27,7 @@ Card {
            text: root.detail; color: Tokens.sub
            font.family: Tokens.font; font.pixelSize: Tokens.fsSmall }
     Text { visible: text !== ""; x: 18; y: 102; width: parent.width - 36; elide: Text.ElideRight
-           text: root.info && root.info.note ? root.info.note : ""
+           text: root.info && root.info.note ? Tr.t(root.info.note) : ""
            color: Tokens.warn; font.family: Tokens.font; font.pixelSize: Tokens.fsSmall }
     Ring { visible: root.ring; x: parent.width - 108; y: 14; width: 92; height: 92
            value: root.info && root.info.temp !== undefined ? root.info.temp : null

@@ -6,7 +6,7 @@ title Lmonitor (Qt) - build
 rem ============================================================
 rem  Builds the Qt version (folder version) into  _build_qt\dist\Lmonitor\
 rem  Everything generated goes into _build_qt\ - the source stays clean.
-rem  Needs the same DLLs / PresentMon / PawnIO next to this file as build.bat.
+rem  Needs the sensor DLLs, PresentMon and PawnIO next to this file.
 rem ============================================================
 set "ROOT=%~dp0"
 set "BUILD=%ROOT%_build_qt"
@@ -23,7 +23,7 @@ if errorlevel 1 (
     )
 )
 
-rem --- PawnIO installer: downloaded once here (same as build.bat), then bundled with the program
+rem --- PawnIO installer: downloaded once here, then bundled with the program
 if not exist "PawnIO_setup.exe" (
     echo Downloading the official PawnIO installer...
     powershell -NoProfile -Command "$ProgressPreference='SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://github.com/namazso/PawnIO.Setup/releases/download/2.2.0/PawnIO_setup.exe' -OutFile 'PawnIO_setup.exe'"
@@ -85,7 +85,7 @@ echo Building. This takes a few minutes...
  --name Lmonitor --icon "%ROOT%Lmonitor.ico" --version-file "%BUILD%\version_info.txt" ^
  --distpath "%BUILD%\dist" --workpath "%BUILD%\work" --specpath "%BUILD%" ^
  --paths "%ROOT%." ^
- --hidden-import PySide6.QtWidgets --hidden-import PySide6.QtQml --hidden-import PySide6.QtQuick --hidden-import PySide6.QtQuickControls2 ^
+ --hidden-import PySide6.QtWidgets --hidden-import PySide6.QtQml --hidden-import PySide6.QtQuick --exclude-module tkinter ^
  --add-data "%ROOT%lmonitor\qt\qml;lmonitor\qt\qml" --add-data "%ROOT%Lmonitor.ico;." ^
  --add-binary "%ROOT%LibreHardwareMonitorLib.dll;." --add-binary "%ROOT%HidSharp.dll;." ^
  --add-binary "%ROOT%System.Memory.dll;." --add-binary "%ROOT%System.Buffers.dll;." ^
@@ -95,6 +95,8 @@ echo Building. This takes a few minutes...
  "%ROOT%lmonitor\qt\__main__.py"
 if errorlevel 1 goto :failed
 if not exist "%BUILD%\dist\Lmonitor\Lmonitor.exe" goto :failed
+%PY% tools\trim_build.py "%BUILD%\dist\Lmonitor"
+if errorlevel 1 goto :failed
 
 echo.
 echo Done. Your program is here:

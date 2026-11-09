@@ -17,7 +17,7 @@ Rectangle {
     Rectangle { x: 14; anchors.verticalCenter: parent.verticalCenter; width: 8; height: 8; radius: 4
                 color: root.active ? Tokens.accent : Tokens.dim }
     Text { anchors.verticalCenter: parent.verticalCenter; x: 34
-           text: root.label; color: root.active ? Tokens.text : Tokens.sub
+           text: Tr.t(root.label); color: root.active ? Tokens.text : Tokens.sub
            font.family: Tokens.font; font.pixelSize: Tokens.fsBody + 1; font.bold: root.active }
     MouseArea { id: hover; anchors.fill: parent; hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor; onClicked: root.clicked() }

@@ -17,7 +17,7 @@ Card {
     }
 
     Text {
-        x: 18; y: 16; text: "Performance"; color: Tokens.text
+        x: 18; y: 16; text: Tr.t("Performance"); color: Tokens.text
         font.family: Tokens.font; font.pixelSize: 18; font.bold: true
     }
     Row {                                   // legend
@@ -41,7 +41,7 @@ Card {
                 color: index === root.rangeIndex ? Tokens.accentA(0.20) : "transparent"
                 border.width: 1
                 border.color: index === root.rangeIndex ? Tokens.accent : Tokens.line
-                Text { anchors.centerIn: parent; text: modelData
+                Text { anchors.centerIn: parent; text: Tr.t(modelData)
                        color: index === root.rangeIndex ? Tokens.text : Tokens.sub
                        font.family: Tokens.font; font.pixelSize: Tokens.fsSmall; font.bold: true }
                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor

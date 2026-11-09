@@ -6,7 +6,7 @@ import Lmonitor
 Item {
     id: root
     property string label: ""
-    property string question: "Are you sure?"
+    property string question: Tr.t("Are you sure?")
     property bool primary: false
     property bool danger: false
     property bool ready: true
@@ -22,8 +22,8 @@ Item {
         id: askRow; visible: root.asking; spacing: 8
         Text { anchors.verticalCenter: parent.verticalCenter; text: root.question; color: Tokens.warn
                font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: true }
-        Pill { label: "Yes"; primary: true; height: 32; onClicked: { root.asking = false; t.stop(); root.confirmed() } }
-        Pill { label: "No"; height: 32; onClicked: { root.asking = false; t.stop() } }
+        Pill { label: Tr.t("Yes"); primary: true; height: 32; onClicked: { root.asking = false; t.stop(); root.confirmed() } }
+        Pill { label: Tr.t("No"); height: 32; onClicked: { root.asking = false; t.stop() } }
     }
     Timer { id: t; interval: 6000; onTriggered: root.asking = false }
 }

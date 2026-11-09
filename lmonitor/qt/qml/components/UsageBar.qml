@@ -4,7 +4,7 @@ import Lmonitor
 // "Utilization ......... 87%" with a thin bar. value null -> "--".
 Item {
     id: root
-    property string label: "Utilization"
+    property string label: Tr.t("Utilization")
     property var value: null
     property color color: "#f4f4f6"
     height: 34

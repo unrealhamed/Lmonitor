@@ -26,13 +26,13 @@ Item {
         for (var i = 0; i < c.length; ++i) if (sel[c[i].id]) b += c[i].old_bytes
         return b
     }
-    function fmt(b) { return b >= 1073741824 ? (b / 1073741824).toFixed(1) + " GB" : b >= 1048576 ? (b / 1048576).toFixed(0) + " MB" : Math.round(b / 1024) + " KB" }
+    function fmt(b) { return b >= 1073741824 ? (b / 1073741824).toFixed(1) + Tr.t(" GB") : b >= 1048576 ? (b / 1048576).toFixed(0) + Tr.t(" MB") : Math.round(b / 1024) + Tr.t(" KB") }
 
     PageHeader {
         id: head; width: parent.width
-        kicker: page.busy ? (page.d.progress ? "Scanning " + page.d.progress : "Working…") : "Find what takes space and clean safely"
-        title: "Storage"
-        Pill { label: "Re-scan"; onClicked: if (!page.busy) tools.storScanCaches() }
+        kicker: page.busy ? (page.d.progress ? Tr.t("Scanning ") + page.d.progress : Tr.t("Working…")) : Tr.t("Find what takes space and clean safely")
+        title: Tr.t("Storage")
+        Pill { label: Tr.t("Re-scan"); onClicked: if (!page.busy) tools.storScanCaches() }
     }
     ResultBanner { id: banner; y: head.height + 8; width: parent.width
                    result: page.d.last; onDismissed: tools.storDismiss() }
@@ -53,7 +53,7 @@ Item {
                         width: Math.min(300, (body.width - 2 * page.g) / 3); height: 92
                         Text { x: 18; y: 14; text: modelData.mount + (modelData.label ? "  " + modelData.label : ""); color: Tokens.text
                                font.family: Tokens.font; font.pixelSize: 15; font.bold: true }
-                        Text { x: 18; y: 38; text: modelData.free + " free of " + modelData.total; color: Tokens.sub
+                        Text { x: 18; y: 38; text: modelData.free + Tr.t(" free of ") + modelData.total; color: Tokens.sub
                                font.family: Tokens.font; font.pixelSize: Tokens.fsSmall }
                         Rectangle { x: 18; y: 66; width: parent.width - 36; height: 6; radius: 3; color: "#2a2a31"
                             Rectangle { height: parent.height; radius: 3; width: parent.width * Math.min(100, modelData.pct) / 100
@@ -67,10 +67,10 @@ Item {
                 Column {
                     id: cc; x: 20; y: 16; width: parent.width - 40; spacing: 6
                     Item { width: parent.width; height: 30
-                        Text { anchors.verticalCenter: parent.verticalCenter; text: "Cache and temp folders"; color: Tokens.text
+                        Text { anchors.verticalCenter: parent.verticalCenter; text: Tr.t("Cache and temp folders"); color: Tokens.text
                                font.family: Tokens.font; font.pixelSize: 16; font.bold: true }
                         Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                               text: page.d.scanned ? "Can free about " + page.d.reclaimable : ""; color: Tokens.accent
+                               text: page.d.scanned ? Tr.t("Can free about ") + page.d.reclaimable : ""; color: Tokens.accent
                                font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: true } }
                     Repeater {
                         model: page.d.caches || []
@@ -81,25 +81,25 @@ Item {
                                     checked: !!page.sel[modelData.id]
                                     onToggled: function (v) { var m = {}; for (var k in page.sel) m[k] = page.sel[k]; m[modelData.id] = v; page.sel = m } }
                             Column { x: 36; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 170; spacing: 1
-                                Text { width: parent.width; elide: Text.ElideRight; text: modelData.title
+                                Text { width: parent.width; elide: Text.ElideRight; text: Tr.t(modelData.title)
                                        color: modelData.present ? Tokens.text : Tokens.dim
                                        font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: true }
-                                Text { width: parent.width; elide: Text.ElideRight; text: modelData.note; color: Tokens.dim
+                                Text { width: parent.width; elide: Text.ElideRight; text: Tr.t(modelData.note); color: Tokens.dim
                                        font.family: Tokens.font; font.pixelSize: 10 } }
                             Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                                    horizontalAlignment: Text.AlignRight
-                                   text: !modelData.scanned ? "…" : !modelData.present ? "not found" : modelData.old + " old\n(" + modelData.all + " total)"
+                                   text: !modelData.scanned ? "…" : !modelData.present ? Tr.t("not found") : modelData.old + Tr.t(" old\n(") + modelData.all + Tr.t(" total)")
                                    color: Tokens.sub; font.family: Tokens.font; font.pixelSize: Tokens.fsSmall }
                         }
                     }
                     Item { width: parent.width; height: 52
                         Text { anchors.verticalCenter: parent.verticalCenter; width: parent.width - 220; wrapMode: Text.Wrap
-                               text: "Only files older than a day are removed. This cannot be undone; the folders are rebuilt as needed."
+                               text: Tr.t("Only files older than a day are removed. This cannot be undone; the folders are rebuilt as needed.")
                                color: Tokens.dim; font.family: Tokens.font; font.pixelSize: 10 }
                         ConfirmButton { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; primary: true
-                                        label: "Clean selected (" + page.fmt(page.pickedBytes()) + ")"
+                                        label: Tr.t("Clean selected (") + page.fmt(page.pickedBytes()) + ")"
                                         ready: !page.busy && page.picked().length > 0
-                                        question: "Delete old files?"
+                                        question: Tr.t("Delete old files?")
                                         onConfirmed: tools.storClean(page.picked()) } }
                 }
             }
@@ -108,44 +108,44 @@ Item {
                 width: parent.width; height: bc.height + 36
                 Column {
                     id: bc; x: 20; y: 16; width: parent.width - 40; spacing: 8
-                    Text { text: "Big folders and large files"; color: Tokens.text; font.family: Tokens.font; font.pixelSize: 16; font.bold: true }
+                    Text { text: Tr.t("Big folders and large files"); color: Tokens.text; font.family: Tokens.font; font.pixelSize: 16; font.bold: true }
                     Text { width: parent.width; wrapMode: Text.Wrap; color: Tokens.dim
-                           text: "Measuring only. Windows, Program Files and system folders are never offered for deletion."
+                           text: Tr.t("Measuring only. Windows, Program Files and system folders are never offered for deletion.")
                            font.family: Tokens.font; font.pixelSize: Tokens.fsSmall }
                     Row { spacing: 10
-                        Pill { label: "Find big folders"; onClicked: if (!page.busy) tools.storScanFolders() }
-                        Pill { label: "Find large files (500 MB+)"; onClicked: if (!page.busy) tools.storScanLarge() } }
-                    Text { visible: page.d.folders_done && (page.d.folders || []).length > 0; text: "BIGGEST FOLDERS"; color: Tokens.sub
+                        Pill { label: Tr.t("Find big folders"); onClicked: if (!page.busy) tools.storScanFolders() }
+                        Pill { label: Tr.t("Find large files (500 MB+)"); onClicked: if (!page.busy) tools.storScanLarge() } }
+                    Text { visible: page.d.folders_done && (page.d.folders || []).length > 0; text: Tr.t("BIGGEST FOLDERS"); color: Tokens.sub
                            font.family: Tokens.font; font.pixelSize: 10; font.bold: true }
                     Repeater {
                         model: page.d.folders || []
                         Item { width: parent.width; height: 36
                             Text { width: parent.width - 220; anchors.verticalCenter: parent.verticalCenter; elide: Text.ElideMiddle
-                                   text: modelData.path; color: Tokens.text; font.family: Tokens.font; font.pixelSize: Tokens.fsBody }
+                                   text: Tr.t(modelData.path); color: Tokens.text; font.family: Tokens.font; font.pixelSize: Tokens.fsBody }
                             Text { anchors.right: showBtn.left; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter
                                    text: modelData.size + (modelData.partial ? "+" : ""); color: Tokens.accent
                                    font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: true }
                             Pill { id: showBtn; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; height: 28
-                                   label: "Show"; onClicked: tools.storShow(modelData.path) } }
+                                   label: Tr.t("Show"); onClicked: tools.storShow(modelData.path) } }
                     }
-                    Text { visible: page.d.large_done && (page.d.large || []).length > 0; text: "LARGE FILES"; color: Tokens.sub
+                    Text { visible: page.d.large_done && (page.d.large || []).length > 0; text: Tr.t("LARGE FILES"); color: Tokens.sub
                            font.family: Tokens.font; font.pixelSize: 10; font.bold: true }
-                    Text { visible: page.d.large_done && (page.d.large || []).length === 0; text: "No file of 500 MB or more was found."; color: Tokens.dim
+                    Text { visible: page.d.large_done && (page.d.large || []).length === 0; text: Tr.t("No file of 500 MB or more was found."); color: Tokens.dim
                            font.family: Tokens.font; font.pixelSize: Tokens.fsBody }
                     Repeater {
                         model: page.d.large || []
                         Item { width: parent.width; height: 50
                             Column { anchors.verticalCenter: parent.verticalCenter; width: parent.width - 330; spacing: 1
-                                Text { width: parent.width; elide: Text.ElideMiddle; text: modelData.path; color: Tokens.text
+                                Text { width: parent.width; elide: Text.ElideMiddle; text: Tr.t(modelData.path); color: Tokens.text
                                        font.family: Tokens.font; font.pixelSize: Tokens.fsBody }
-                                Text { visible: modelData.reason !== ""; width: parent.width; elide: Text.ElideRight; text: modelData.reason
+                                Text { visible: modelData.reason !== ""; width: parent.width; elide: Text.ElideRight; text: Tr.t(modelData.reason)
                                        color: Tokens.dim; font.family: Tokens.font; font.pixelSize: 10 } }
                             Text { anchors.right: row2.left; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter
-                                   text: modelData.size; color: Tokens.accent
+                                   text: Tr.t(modelData.size); color: Tokens.accent
                                    font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: true }
                             Row { id: row2; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 8
-                                Pill { label: "Show"; height: 28; onClicked: tools.storShow(modelData.path) }
-                                ConfirmButton { visible: modelData.deletable; label: "Recycle"; question: "Move to Recycle Bin?"
+                                Pill { label: Tr.t("Show"); height: 28; onClicked: tools.storShow(modelData.path) }
+                                ConfirmButton { visible: modelData.deletable; label: Tr.t("Recycle"); question: Tr.t("Move to Recycle Bin?")
                                                 ready: !page.busy; onConfirmed: tools.storRecycle(modelData.path) } } }
                     }
                 }

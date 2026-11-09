@@ -20,7 +20,7 @@ Rectangle {
                 color: index === root.index ? Tokens.accentA(0.20) : "transparent"
                 border.width: index === root.index ? 1 : 0
                 border.color: Tokens.accent
-                Text { anchors.centerIn: parent; text: modelData
+                Text { anchors.centerIn: parent; text: Tr.t(modelData)
                        color: index === root.index ? Tokens.text : Tokens.sub
                        font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: true }
                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor

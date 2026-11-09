@@ -23,6 +23,9 @@ PawnIO_setup.exe
 # Installers belong on the GitHub Releases page, not in the repository
 Lmonitor_Setup_*.exe
 
+# Old version zips, kept on this PC only
+archive/
+
 # Generated files
 Lmonitor.ico.bak
 version_info.txt

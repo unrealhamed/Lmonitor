@@ -1,7 +1,6 @@
 """Lmonitor engine: everything that reads the PC and keeps state.
 
-No window code lives here (no tkinter, no PIL images, no Qt). The Tk window
-(monitor.py) and the Qt window (lmonitor/qt_app.py) both use these classes.
+No window code lives here. The Qt window (lmonitor/qt) uses these classes.
 Dependency rule: the engine never imports a UI module.
 """
 import atexit
@@ -33,16 +32,12 @@ except Exception:
     pynvml = None
 
 
-def ask_yes_no(title, message, parent=None):
-    """Yes/No question. The UI replaces this (Tk dialog by default)."""
-    import tkinter.messagebox as mbox
-    return mbox.askyesno(title, message, parent=parent)
 
 
 # =============================================================== Paths
 class Paths:
     # The DLLs, PresentMon and the icon live in the project folder (next to
-    # monitor.py), one level above this package; in a built EXE, in _MEIPASS.
+    # build_qt.bat), one level above this package; in a built EXE, in _MEIPASS.
     HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     APPDATA = os.environ.get("APPDATA", HERE)
     CFG_DIR = os.path.join(APPDATA, "Lmonitor")
@@ -211,19 +206,7 @@ class Theme:
         cls.ACCENT, cls.ACCENT_HI, cls.C_ON = (
             base, cls.mix(base, "#ffffff", 0.18), on)
 
-    @classmethod
-    def lift(cls, color, t):
-        """A slightly lighter (dark themes) or darker (light theme) color."""
-        return cls.mix(color, "#000000" if cls.LIGHT else "#ffffff", t)
 
-    @classmethod
-    def ui_color(cls, color):
-        """Value colors made for the overlay -> readable in the window."""
-        if color == cls.WHITE:
-            return cls.TXT
-        if cls.LIGHT and color == cls.YELLOW:
-            return "#b07800"
-        return color
 
     @classmethod
     def palette(cls, key):
@@ -309,12 +292,6 @@ class Metrics:
             result.append((n, [by_key[k] for k in order["items"][n]]))
         return result
 
-    @classmethod
-    def group_of(cls, key):
-        for name, items in cls.GROUPS:
-            if any(k == key for k, _, _ in items):
-                return name
-        return None
 
 
 # =============================================================== Thresholds
@@ -374,7 +351,7 @@ class Settings:
                 "driver_asked": False, "look": "dark", "bg": "black",
                 "palette": "auto", "net_unit": "bytes",
                 "ui_theme": "default", "ui_accent": "auto", "sessions_on": True,
-                "show_mode": "always", "hotkey_secs": 5,
+                "show_mode": "always", "hotkey_secs": 5, "language": "en",
                 "font": "Consolas", "weight": "bold", "label_weight": "bold",
                 "value_color": "white",
                 "order": Metrics.default_order(),
@@ -412,7 +389,7 @@ class Settings:
                       "driver_asked", "look", "bg", "monitor", "refresh",
                       "palette", "net_unit", "ui_theme", "ui_accent",
                       "sessions_on", "show_mode", "hotkey_secs", "font", "weight",
-                      "label_weight", "value_color"):
+                      "label_weight", "value_color", "language"):
                 if k in raw:
                     cfg[k] = raw[k]
             shows = raw.get("show", {})
@@ -444,6 +421,8 @@ class Settings:
             cfg["bg"] = "black"
         if cfg["palette"] not in [k for k, _, _ in Theme.OVERLAY_PALETTES]:
             cfg["palette"] = "auto"
+        if cfg["language"] not in ("en", "fa"):
+            cfg["language"] = "en"
         if cfg["net_unit"] not in ("bytes", "bits"):
             cfg["net_unit"] = "bytes"
         if cfg["ui_theme"] not in [k for k, _, _, _ in Theme.UI_THEMES]:
@@ -588,18 +567,8 @@ class WinApi:
             time.sleep(0.5)
         sys.exit(0)
 
-    @staticmethod
-    def lower_priority():
-        try:  # be polite to the game
-            psutil.Process().nice(psutil.BELOW_NORMAL_PRIORITY_CLASS)
-        except Exception:
-            pass
 
     # ---- windows
-    @classmethod
-    def top_hwnd(cls, widget):
-        wid = widget.winfo_id()
-        return cls.user32.GetParent(wid) or wid
 
     OPEN_OK = re.compile(r"ms-settings:[a-z-]+|[a-z]+\.msc|"
                          r"SystemPropertiesPerformance\.exe|control [a-z]+\.cpl")
@@ -637,33 +606,15 @@ class WinApi:
         return pid.value
 
     # --- by window handle (HWND): used by any UI (Tk, Qt)
-    @classmethod
-    def click_through_hwnd(cls, h):
-        style = cls.user32.GetWindowLongW(h, -20)
-        cls.user32.SetWindowLongW(h, -20, style | cls.EX_FLAGS)
 
     @classmethod
     def keep_on_top_hwnd(cls, h):
         cls.user32.SetWindowPos(h, -1, 0, 0, 0, 0, 0x13)
 
-    @classmethod
-    def interactive_hwnd(cls, h):
-        style = cls.user32.GetWindowLongW(h, -20)
-        cls.user32.SetWindowLongW(h, -20, style & ~0x20)
 
     # --- Tk widget variants (kept for the classic window)
-    @classmethod
-    def make_click_through(cls, widget):
-        cls.click_through_hwnd(cls.top_hwnd(widget))
 
-    @classmethod
-    def keep_on_top(cls, widget):
-        cls.keep_on_top_hwnd(cls.top_hwnd(widget))
 
-    @classmethod
-    def make_interactive(cls, widget):
-        """Remove click-through so the bar can be dragged (move mode)."""
-        cls.interactive_hwnd(cls.top_hwnd(widget))
 
     @staticmethod
     def blur_supported():
@@ -673,10 +624,6 @@ class WinApi:
         except Exception:
             return False
 
-    @classmethod
-    def set_blur(cls, widget, tint=None, alpha=0):
-        """Tk widget variant of blur_hwnd."""
-        return cls.blur_hwnd(cls.top_hwnd(widget), tint, alpha)
 
     @classmethod
     def blur_hwnd(cls, hwnd, tint=None, alpha=0):
@@ -725,29 +672,7 @@ class WinApi:
         except Exception:
             pass
 
-    @classmethod
-    def round_corners(cls, widget):
-        """Rounded corners on Windows 11 (ignored on older Windows)."""
-        try:
-            pref = ctypes.c_int(2)  # DWMWCP_ROUND
-            ctypes.windll.dwmapi.DwmSetWindowAttribute(
-                cls.top_hwnd(widget), 33, ctypes.byref(pref), 4)
-        except Exception:
-            pass
 
-    @classmethod
-    def dark_titlebar(cls, widget, dark=True, bg="#17171b"):
-        """Title bar dark / light and (Windows 11) in the window color."""
-        try:
-            h = cls.top_hwnd(widget)
-            dwm = ctypes.windll.dwmapi
-            flag = ctypes.c_int(1 if dark else 0)
-            dwm.DwmSetWindowAttribute(h, 20, ctypes.byref(flag), 4)
-            r, g, b = (int(bg[i:i + 2], 16) for i in (1, 3, 5))
-            col = ctypes.c_int((b << 16) | (g << 8) | r)  # 0x00BBGGRR
-            dwm.DwmSetWindowAttribute(h, 35, ctypes.byref(col), 4)
-        except Exception:
-            pass
 
 
 # =============================================================== LibreHardwareMonitor
@@ -1074,7 +999,12 @@ class GpuReader:
             if want["g_clk"]:
                 clk = self._q(nv.nvmlDeviceGetClockInfo, nv.NVML_CLOCK_GRAPHICS)
             if want["g_mem"]:
-                m = self._q(nv.nvmlDeviceGetMemoryInfo)
+                # v2 leaves out the memory the driver reserves for itself (about 240 MB
+                # on an 8 GB card), which is what nvidia-smi and Task Manager report
+                v2 = getattr(nv, "nvmlMemory_v2", None)
+                m = self._q(nv.nvmlDeviceGetMemoryInfo, v2) if v2 is not None else None
+                if m is None:
+                    m = self._q(nv.nvmlDeviceGetMemoryInfo)
                 if m is not None and m.total:
                     mem = (m.used / 1024**3, m.total / 1024**3)
         h = self.host
@@ -1313,153 +1243,6 @@ class FpsMonitor:
 
 
 # =============================================================== PawnIO driver
-class DriverManager:
-    """CPU temperature/power need the PawnIO driver (LibreHardwareMonitor 0.9.5+).
-
-    Official sources: pawnio.eu and github.com/namazso/PawnIO.Setup
-    """
-    URL = ("https://github.com/namazso/PawnIO.Setup/releases/download/"
-           "2.2.0/PawnIO_setup.exe")
-    DONE_TEXT = "Driver installed - click here to restart the app"
-
-    def __init__(self, app):
-        self.app = app
-        self.ok = self.installed()
-        self.text = ""
-        self.busy = False
-        self.done = False
-        self.started = time.time()
-
-    @staticmethod
-    def installed():
-        try:
-            import winreg
-            winreg.CloseKey(winreg.OpenKey(
-                winreg.HKEY_LOCAL_MACHINE,
-                r"SYSTEM\CurrentControlSet\Services\PawnIO"))
-            return True
-        except Exception:
-            return False
-
-    @staticmethod
-    def service_state():
-        try:
-            r = subprocess.run(["sc", "query", "PawnIO"], capture_output=True,
-                               stdin=subprocess.DEVNULL, text=True, timeout=10, creationflags=0x08000000)
-            lines = [x.strip() for x in r.stdout.splitlines() if "STATE" in x]
-            return lines[0] if lines else f"not found (code {r.returncode})"
-        except Exception as e:
-            return f"error: {e}"[:60]
-
-    @staticmethod
-    def library_info():
-        try:
-            import winreg
-            k = winreg.OpenKey(
-                winreg.HKEY_LOCAL_MACHINE,
-                r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO")
-            loc = winreg.QueryValueEx(k, "InstallLocation")[0]
-        except Exception:
-            loc = os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"),
-                               "PawnIO")
-        path = os.path.join(loc, "PawnIOLib.dll")
-        return f"{path} exists={os.path.exists(path)}"
-
-    def poll(self):
-        """Notice when the driver appears (installed by us or by hand)."""
-        if not self.ok and self.installed():
-            self.ok = True
-            self.done = True
-            self.text = self.DONE_TEXT
-
-    def notice(self):
-        """The yellow line at the bottom of the settings window."""
-        if self.text:
-            return self.text
-        if not WinApi.admin:
-            return "Limited mode - click to restart as Administrator"
-        if not self.ok:
-            return "CPU temp/power need the PawnIO driver - click to install"
-        a = self.app
-        if (a.shown and a.cpu.available and not a.cpu.seen
-                and (a.settings.show["c_temp"] or a.settings.show["c_pow"])
-                and time.time() - self.started > 15):
-            return "CPU sensors empty - restart the PC, then send the sensor report"
-        return ""
-
-    def click(self):
-        """Click on the yellow line."""
-        if self.busy:
-            return
-        if self.done:
-            self.app.restart()
-            return
-        if not WinApi.admin:
-            if WinApi.relaunch_as_admin():
-                self.app.quit()
-            return
-        if self.ok:
-            return
-        parent = self.app.root
-        if os.path.exists(Paths.PAWNIO_SETUP):  # installer is inside this app
-            if ask_yes_no(
-                    "Install CPU sensor driver",
-                    "CPU temperature and power need the PawnIO driver.\n\n"
-                    "Install it now? (No internet needed)", parent=parent):
-                self.busy = True
-                self.text = "Installing PawnIO driver..."
-                threading.Thread(target=self._install, daemon=True).start()
-        elif ask_yes_no(
-                "Download CPU sensor driver",
-                "CPU temperature and power need the PawnIO driver.\n\n"
-                "Open the official download in your browser? Run the "
-                "downloaded PawnIO_setup.exe afterwards.", parent=parent):
-            webbrowser.open(self.URL)
-            self.text = "Run PawnIO_setup.exe after it downloads"
-
-    def _install(self):
-        try:
-            r = subprocess.run([Paths.PAWNIO_SETUP, "-install", "-silent"],
-                               capture_output=True, stdin=subprocess.DEVNULL,
-                               text=True, timeout=300,
-                               creationflags=0x08000000)
-            self.poll()
-            if not self.done:
-                if r.returncode in (0, 3010):  # 3010 = ok, reboot required
-                    self.done = True
-                    self.text = self.DONE_TEXT
-                else:
-                    Logger.error("pawnio silent install",
-                                 f"code {r.returncode}\n{getattr(r, 'stdout', '')}\n"
-                                 f"{getattr(r, 'stderr', '')}")
-                    self.text = f"Install failed (code {r.returncode})"
-                    self._open_installer()
-        except Exception as e:
-            self.text = f"Install error: {e}"[:70]
-            Logger.error("install driver")
-        finally:
-            self.busy = False
-
-    def _open_installer(self):
-        """The silent install failed: open the real installer window (UAC) so
-        the person can see the reason and finish it by hand."""
-        try:
-            rc = ctypes.windll.shell32.ShellExecuteW(
-                None, "runas", Paths.PAWNIO_SETUP, None, None, 1)
-            if rc > 32:
-                self.text += " - installer window opened, finish it there"
-        except Exception:
-            Logger.error("open pawnio installer")
-
-    def first_run_prompt(self):
-        """Offer the bundled driver once, right after the first start."""
-        a = self.app
-        if (WinApi.admin and not self.ok and a.cpu.available
-                and os.path.exists(Paths.PAWNIO_SETUP)
-                and not a.settings["driver_asked"]):
-            a.settings["driver_asked"] = True
-            a.settings.save()
-            self.click()
 
 
 # =============================================================== Diagnostics
@@ -1517,7 +1300,7 @@ class Diagnostics:
 class AppInfo:
     """Name / version shown in the Hardware > System tab."""
     NAME = "Lmonitor"
-    VERSION = "1.16.0"
+    VERSION = "1.17.0"
     PUBLISHER = ""      # put your name or company here (empty = "Not set")
     URL = "https://github.com/unrealhamed/Lmonitor"
 
@@ -1762,11 +1545,43 @@ class NetworkReader:
         self.prev = None      # (time, counters)
         self.speeds = {}      # nic -> (down B/s, up B/s)
         self.info = {}        # nic -> (is up, link speed in Mbit/s)
+        self.virtual = set()  # adapters that are not real hardware (VPN, tunnels...)
+        self._known = None
 
     @staticmethod
     def _real(name):
         n = name.lower()
         return not (n.startswith("lo") and len(n) <= 3 or "loopback" in n)
+
+    @staticmethod
+    def _virtual_names():
+        """Names of the adapters Windows marks as not being hardware. Empty if unknown."""
+        class Row(ctypes.Structure):            # the start of MIB_IF_ROW2 (1352 bytes)
+            _fields_ = [("luid", ctypes.c_uint64), ("index", ctypes.c_ulong),
+                        ("guid", ctypes.c_byte * 16), ("alias", ctypes.c_wchar * 257),
+                        ("description", ctypes.c_wchar * 257), ("addr_len", ctypes.c_ulong),
+                        ("addr", ctypes.c_ubyte * 64), ("mtu", ctypes.c_ulong),
+                        ("type", ctypes.c_ulong), ("tunnel", ctypes.c_int),
+                        ("media", ctypes.c_int), ("physical", ctypes.c_int),
+                        ("access", ctypes.c_int), ("direction", ctypes.c_int),
+                        ("flags", ctypes.c_ubyte)]
+        out = set()
+        try:
+            api = ctypes.windll.iphlpapi
+            table = ctypes.c_void_p()
+            if api.GetIfTable2(ctypes.byref(table)) != 0:
+                return out
+            try:
+                count = ctypes.c_ulong.from_address(table.value).value
+                for i in range(count):
+                    row = Row.from_address(table.value + 8 + i * 1352)
+                    if not row.flags & 1:       # InterfaceAndOperStatusFlags.HardwareInterface
+                        out.add(row.alias)
+            finally:
+                api.FreeMibTable(table)
+        except Exception:
+            Logger.error("network adapter list")
+        return out
 
     def read(self):
         now = time.time()
@@ -1775,6 +1590,9 @@ class NetworkReader:
             stats = psutil.net_if_stats()
         except Exception:
             return
+        if set(counters) != self._known:        # adapters came or went
+            self._known = set(counters)
+            self.virtual = self._virtual_names()
         self.info = {n: (s.isup, s.speed) for n, s in stats.items()
                      if self._real(n)}
         if self.prev is None:
@@ -1791,15 +1609,15 @@ class NetworkReader:
         self.prev = (now, counters)
 
     def total(self):
-        """(down, up) in bytes/s summed over interfaces that are up."""
+        """(down, up) in bytes/s of the real adapters that are up. A VPN's traffic also
+        passes through a real adapter, so adding the virtual ones would count it twice.
+        Virtual adapters only count when no real adapter is up."""
         if not self.speeds:
             return None, None
-        d = u = 0.0
-        for n, (down, up) in self.speeds.items():
-            if self.info.get(n, (False, 0))[0]:
-                d += down
-                u += up
-        return d, u
+        up_now = [n for n in self.speeds if self.info.get(n, (False, 0))[0]]
+        use = [n for n in up_now if n not in self.virtual] or up_now
+        return (sum(self.speeds[n][0] for n in use),
+                sum(self.speeds[n][1] for n in use))
 
     def interfaces(self):
         """[(name, link Mbit/s, down, up)] for interfaces that are up."""
@@ -2002,14 +1820,6 @@ class SessionStore:
                 continue
         return out
 
-    def load_samples(self, sid):
-        con = self._con()
-        try:
-            row = con.execute("SELECT samples FROM sessions WHERE id=?",
-                              (sid,)).fetchone()
-        finally:
-            con.close()
-        return json.loads(zlib.decompress(row[0]).decode("utf-8")) if row else None
 
     def delete(self, ids):
         con = self._con()
@@ -2586,35 +2396,6 @@ class SessionView:
             return v[key[1]] if v else None
         return s.get(key)
 
-    @classmethod
-    def rows_compare(cls, a, b):
-        if a is None or b is None:
-            return [("row", "Select two sessions in the list (click again to "
-                            "unselect)", "")]
-        rows = [("row", "A  (first clicked)", f"{a['game']}  {cls.clock(a['duration'])}"),
-                ("row", "B  (second clicked)", f"{b['game']}  {cls.clock(b['duration'])}")]
-        if a["game"].lower() != b["game"].lower():
-            rows.append(("row", "Note", "different programs", Theme.YELLOW))
-        for label, key, lower_better, spec, unit in cls.CMP:
-            va, vb = cls._get(a, key), cls._get(b, key)
-            if va is None or vb is None:
-                rows.append(("row", label, "n/a"))
-                continue
-            d = vb - va
-            col = None
-            if lower_better is not None and abs(d) > max(0.03 * abs(va), 0.5):
-                col = Theme.C_OK if (d < 0) == lower_better else Theme.RED
-            rows.append(("row", label, f"{va:{spec}} -> {vb:{spec}}{unit}   "
-                         f"({d:+{spec}})", col))
-        na, nb = len(a["drops"]), len(b["drops"])
-        rows.append(("row", "FPS drops", f"{na} -> {nb}",
-                     None if na == nb else (Theme.C_OK if nb < na else Theme.RED)))
-        for label, key in (("GPU throttling", "gpu_status"),
-                           ("CPU throttling", "cpu_status")):
-            sa, sb = a.get(key, "?"), b.get(key, "?")
-            rows.append(("row", label, f"{cls.STAT.get(sa, sa)} -> "
-                         f"{cls.STAT.get(sb, sb)}"))
-        return rows
 
     STAT = {"possible": "possible throttle", "clock_dip": "clock dip",
             "hot_no_drop": "hot, no drop", "ok": "none seen", "cool": "none seen",
@@ -3212,10 +2993,6 @@ class DiagRunner:
         threading.Thread(target=self._run, daemon=True).start()
         return True
 
-    def run_now(self):
-        """Synchronous scan (tests / the report)."""
-        self.running = True
-        self._run()
 
     def _run(self):
         try:
@@ -3649,14 +3426,6 @@ class Optimizer:
         self.refreshed = True
         self.version += 1
 
-    def scan_temp(self):
-        for lid, title, getter in TempCleaner.LOCATIONS:
-            try:
-                self.temp[lid] = TempCleaner.scan(getter())
-            except Exception:
-                self.temp[lid] = None
-                Logger.error("optimizer temp scan")
-        self.version += 1
 
     def run(self, fn, *args):
         """Run one action in a worker thread (the window polls .busy)."""
@@ -3758,38 +3527,6 @@ class Optimizer:
                             "Windows did not keep the change - it was put back.")
 
     # ---- temp files (cannot be undone)
-    def clean_temp(self, ids):
-        free0 = None
-        freed = deleted = skipped = 0
-        for lid, title, getter in TempCleaner.LOCATIONS:
-            if lid not in ids:
-                continue
-            root = getter()
-            try:
-                if free0 is None:
-                    free0 = psutil.disk_usage(root).free
-            except Exception:
-                pass
-            r = TempCleaner.clean(root)
-            freed += r["freed"]
-            deleted += r["deleted"]
-            skipped += r["skipped"]
-        free1 = None
-        try:
-            free1 = psutil.disk_usage(next(g() for l, t, g in TempCleaner.LOCATIONS
-                                           if l in ids)).free
-        except Exception:
-            pass
-        self.scan_temp()
-        title = "Cleaned temp files"
-        self._log("temp", title, "", fmt_size(freed) + " freed", None, True)
-        return self._result(
-            ok=True, title=title,
-            before=(f"{free0 / 1024 ** 3:.2f} GB free" if free0 is not None else ""),
-            after=(f"{free1 / 1024 ** 3:.2f} GB free" if free1 is not None else ""),
-            message=f"{deleted} file(s) removed, {fmt_size(freed)} freed"
-                    + (f"; {skipped} in use were left" if skipped else "")
-                    + ". This cannot be undone (temp files are recreated as needed).")
 
     # ---- undo
     def revert(self, change_id):
@@ -4082,26 +3819,6 @@ class Storage:
         self.version += 1
 
     # ---- the only things that delete
-    def clean_cache(self, lid):
-        loc = next((l for l in self.cache_locations() if l[0] == lid), None)
-        if not loc or not loc[2]:
-            return self._result(ok=False, title="Clean cache", before="", after="",
-                                message="That folder is not on this PC.")
-        free0 = self._free(loc[2])
-        r = StorageCleaner.clean(loc[2])
-        free1 = self._free(loc[2])
-        self.caches[lid] = StorageCleaner.scan(loc[2])
-        title = f"Cleaned: {loc[1]}"
-        self.log.add({"t": time.time(), "kind": "storage", "title": title,
-                      "before": "", "after": fmt_size(r["freed"]) + " freed",
-                      "revert": None, "verified": True, "status": "applied"})
-        return self._result(
-            ok=True, title=title,
-            before=f"{free0 / 1024 ** 3:.2f} GB free" if free0 is not None else "",
-            after=f"{free1 / 1024 ** 3:.2f} GB free" if free1 is not None else "",
-            message=f"{r['deleted']} file(s) removed, {fmt_size(r['freed'])} freed"
-                    + (f"; {r['skipped']} in use were left" if r["skipped"] else "")
-                    + ". This cannot be undone.")
 
     def clean_many(self, ids):
         """Clean the chosen cache folders in one go (one log entry)."""
@@ -4802,150 +4519,6 @@ class Telemetry:
 Monitor = namedtuple("Monitor", "name index x y w h primary res_w res_h hz")
 
 
-class DisplayManager:
-    """Finds the connected monitors (and notices plug / unplug / resolution).
-
-    Positions are in the same coordinate system Tk uses, so the overlay can
-    be placed with them directly. `res_w x res_h` is the real resolution.
-    """
-
-    def __init__(self, root):
-        self.root = root
-        self.monitors = []
-        self._sig = None
-        self.refresh()
-
-    # ---- detection
-    def _fallback(self):
-        r = self.root
-        return [Monitor("primary", 1, 0, 0, r.winfo_screenwidth(),
-                        r.winfo_screenheight(), True, r.winfo_screenwidth(),
-                        r.winfo_screenheight(), 0)]
-
-    def _enumerate(self):
-        """Ask Windows for the monitors. [] when that is not possible."""
-        user32 = ctypes.windll.user32
-        RECT = wintypes.RECT
-
-        class MonitorInfo(ctypes.Structure):
-            _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", RECT),
-                        ("rcWork", RECT), ("dwFlags", wintypes.DWORD),
-                        ("szDevice", wintypes.WCHAR * 32)]
-
-        found = []
-        proc_type = ctypes.WINFUNCTYPE(
-            wintypes.BOOL, wintypes.HANDLE, wintypes.HDC,
-            ctypes.POINTER(RECT), wintypes.LPARAM)
-
-        def callback(hmon, hdc, rect, lparam):
-            mi = MonitorInfo()
-            mi.cbSize = ctypes.sizeof(MonitorInfo)
-            if user32.GetMonitorInfoW(hmon, ctypes.byref(mi)):
-                found.append(mi)
-            return True
-
-        user32.EnumDisplayMonitors.argtypes = [
-            wintypes.HDC, ctypes.c_void_p, proc_type, wintypes.LPARAM]
-        user32.GetMonitorInfoW.argtypes = [wintypes.HANDLE,
-                                           ctypes.POINTER(MonitorInfo)]
-        cb = proc_type(callback)  # keep a reference while Windows calls it
-        user32.EnumDisplayMonitors(None, None, cb, 0)
-        out = []
-        for n, mi in enumerate(found, 1):
-            r = mi.rcMonitor
-            w, h = r.right - r.left, r.bottom - r.top
-            rw, rh, hz = self._real_mode(mi.szDevice, w, h)
-            digits = "".join(ch for ch in mi.szDevice if ch.isdigit())
-            out.append(Monitor(mi.szDevice, int(digits) if digits else n,
-                               r.left, r.top, w, h, bool(mi.dwFlags & 1),
-                               rw, rh, hz))
-        return sorted(out, key=lambda m: m.index)
-
-    @staticmethod
-    def _real_mode(device, w, h):
-        """Real resolution and refresh rate (Windows scaling not applied)."""
-        class DevMode(ctypes.Structure):
-            _fields_ = [
-                ("dmDeviceName", wintypes.WCHAR * 32),
-                ("dmSpecVersion", wintypes.WORD),
-                ("dmDriverVersion", wintypes.WORD),
-                ("dmSize", wintypes.WORD), ("dmDriverExtra", wintypes.WORD),
-                ("dmFields", wintypes.DWORD),
-                ("dmPositionX", wintypes.LONG), ("dmPositionY", wintypes.LONG),
-                ("dmDisplayOrientation", wintypes.DWORD),
-                ("dmDisplayFixedOutput", wintypes.DWORD),
-                ("dmColor", ctypes.c_short), ("dmDuplex", ctypes.c_short),
-                ("dmYResolution", ctypes.c_short),
-                ("dmTTOption", ctypes.c_short), ("dmCollate", ctypes.c_short),
-                ("dmFormName", wintypes.WCHAR * 32),
-                ("dmLogPixels", wintypes.WORD),
-                ("dmBitsPerPel", wintypes.DWORD),
-                ("dmPelsWidth", wintypes.DWORD),
-                ("dmPelsHeight", wintypes.DWORD),
-                ("dmDisplayFlags", wintypes.DWORD),
-                ("dmDisplayFrequency", wintypes.DWORD),
-                ("dmICMMethod", wintypes.DWORD),
-                ("dmICMIntent", wintypes.DWORD),
-                ("dmMediaType", wintypes.DWORD),
-                ("dmDitherType", wintypes.DWORD),
-                ("dmReserved1", wintypes.DWORD),
-                ("dmReserved2", wintypes.DWORD),
-                ("dmPanningWidth", wintypes.DWORD),
-                ("dmPanningHeight", wintypes.DWORD)]
-        try:
-            dm = DevMode()
-            dm.dmSize = ctypes.sizeof(DevMode)
-            if ctypes.windll.user32.EnumDisplaySettingsW(
-                    device, -1, ctypes.byref(dm)):  # -1 = current mode
-                if dm.dmPelsWidth and dm.dmPelsHeight:
-                    return (int(dm.dmPelsWidth), int(dm.dmPelsHeight),
-                            int(dm.dmDisplayFrequency))
-        except Exception:
-            pass
-        return w, h, 0
-
-    def refresh(self):
-        """Re-read the monitors; True when something changed."""
-        try:
-            mons = self._enumerate()
-        except Exception:
-            Logger.error("enumerate monitors")
-            mons = []
-        if not any(m.primary for m in mons):
-            mons = self._fallback()
-        sig = tuple(mons)
-        changed = sig != self._sig
-        self.monitors, self._sig = mons, sig
-        return changed
-
-    # ---- lookup
-    @property
-    def primary(self):
-        return next((m for m in self.monitors if m.primary), self.monitors[0])
-
-    def resolve(self, name):
-        """-> (monitor to use, True when the chosen one is not connected)."""
-        if not name or name == "primary":
-            return self.primary, False
-        for m in self.monitors:
-            if m.name == name:
-                return m, False
-        return self.primary, True
-
-    def at(self, x, y):
-        """The monitor containing the point (or the nearest one)."""
-        best, dist = self.primary, None
-        for m in self.monitors:
-            dx = max(m.x - x, 0, x - (m.x + m.w - 1))
-            dy = max(m.y - y, 0, y - (m.y + m.h - 1))
-            d = dx * dx + dy * dy
-            if dist is None or d < dist:
-                best, dist = m, d
-        return best
-
-    @staticmethod
-    def title(m):
-        return f"Display {m.index}"
 
 
 class CpuLoad:

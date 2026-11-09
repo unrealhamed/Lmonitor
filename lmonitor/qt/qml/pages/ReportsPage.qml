@@ -10,8 +10,8 @@ Item {
     readonly property bool busy: d.busy === true
     readonly property int g: Tokens.gap
 
-    PageHeader { id: head; width: parent.width; kicker: "Saved on this PC only"; title: "Reports"
-                 Pill { label: page.busy ? "Working…" : "Rebuild"; onClicked: if (!page.busy) tools.repBuild() } }
+    PageHeader { id: head; width: parent.width; kicker: Tr.t("Saved on this PC only"); title: Tr.t("Reports")
+                 Pill { label: page.busy ? Tr.t("Working…") : Tr.t("Rebuild"); onClicked: if (!page.busy) tools.repBuild() } }
     ResultBanner { id: banner; y: head.height + 8; width: parent.width
                    result: page.d.last; onDismissed: tools.repDismiss() }
 
@@ -20,21 +20,21 @@ Item {
         width: parent.width; spacing: page.g
         Card {                                               // score
             width: 300; height: 230; tint: true
-            Text { x: 22; y: 18; text: "Health score"; color: Tokens.sub; font.family: Tokens.font; font.pixelSize: Tokens.fsBody }
+            Text { x: 22; y: 18; text: Tr.t("Health score"); color: Tokens.sub; font.family: Tokens.font; font.pixelSize: Tokens.fsBody }
             Text { x: 22; y: 44; text: page.d.built && page.d.score !== null && page.d.score !== undefined ? page.d.score : "--"
                    color: Tokens.text; font.family: Tokens.font; font.pixelSize: 64; font.bold: true }
             Text { x: 22; y: 126; width: parent.width - 44; wrapMode: Text.Wrap; color: Tokens.dim
                    text: page.d.built && page.d.score !== null && page.d.score !== undefined
-                         ? "out of 100 - " + page.d.covered + " of " + page.d.total + " checks answered"
-                         : "Run a scan in Diagnostics first." 
+                         ? Tr.t("out of 100 - ") + page.d.covered + Tr.t(" of ") + page.d.total + Tr.t(" checks answered")
+                         : Tr.t("Run a scan in Diagnostics first.") 
                    font.family: Tokens.font; font.pixelSize: Tokens.fsSmall }
         }
         Card {                                               // contents + save
             width: parent.width - 300 - page.g; height: 230
-            Text { x: 22; y: 18; text: "What the report contains"; color: Tokens.text; font.family: Tokens.font; font.pixelSize: 16; font.bold: true }
+            Text { x: 22; y: 18; text: Tr.t("What the report contains"); color: Tokens.text; font.family: Tokens.font; font.pixelSize: 16; font.bold: true }
             Column { x: 22; y: 54; spacing: 8
                 Repeater {
-                    model: [["Last scan", page.d.built ? (page.d.scan_time || "none yet") : ""],
+                    model: [["Last scan", page.d.built ? (page.d.scan_time || Tr.t("none yet")) : ""],
                             ["Issues to look at", page.d.built ? page.d.issues : ""],
                             ["Checks that are fine", page.d.built ? page.d.ok_count : ""],
                             ["Game sessions", page.d.built ? page.d.sessions : ""],
@@ -45,9 +45,9 @@ Item {
                 }
             }
             Row { x: 22; y: parent.height - 58; spacing: 10
-                Pill { primary: true; label: "Save HTML report"; onClicked: if (!page.busy) tools.repSave("html") }
-                Pill { label: "Save JSON"; onClicked: if (!page.busy) tools.repSave("json") }
-                Pill { label: "Open folder"; onClicked: tools.repOpen() }
+                Pill { primary: true; label: Tr.t("Save HTML report"); onClicked: if (!page.busy) tools.repSave("html") }
+                Pill { label: Tr.t("Save JSON"); onClicked: if (!page.busy) tools.repSave("json") }
+                Pill { label: Tr.t("Open folder"); onClicked: tools.repOpen() }
             }
         }
     }

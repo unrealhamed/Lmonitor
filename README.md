@@ -57,7 +57,7 @@ Values turn from white to warning colors with load and temperature (these limits
 ## The window
 
 - **Home:** CPU / GPU / RAM / Storage cards with status words, a real-time chart (1 min / 5 min / 1 hr / 24 hr), network, and a live overlay preview.
-- **Performance** and **Hardware:** live charts and detailed CPU, GPU, memory, storage, network and system information.
+- **Graphs** and **Hardware:** live charts and detailed CPU, GPU, memory, storage, network and system information.
 - **Overlay:** every overlay setting above, with a live preview.
 - **Sessions:** every game is recorded automatically (a program drawing frames in front, seen by PresentMon; browsers and players are ignored; sessions under 1 minute are dropped). Each session stores average FPS, 1% / 0.1% lows from real frame times, load, temperatures and clocks. Findings only appear when the sensors prove them; a missing sensor is shown as *Unknown*, never as "fine". Data stays in `%APPDATA%\Lmonitor\sessions.db` and can be switched off.
 - **Diagnostics:** one click scans the PC (the scan changes nothing) and lists real problems, worst first, each with the measured proof, a plain explanation and shortcuts to fix it (open the right Windows page, or go to Optimizer / Storage).
@@ -79,7 +79,7 @@ Everything is saved automatically in `%APPDATA%\Lmonitor\settings.json`.
 
 ## Run from source
 
-You need Windows, 64-bit Python 3 and the sensor files described in [docs/BUILD.md](docs/BUILD.md) (LibreHardwareMonitor DLLs and PresentMon next to `monitor.py`).
+You need Windows, 64-bit Python 3 and the sensor files described in [docs/BUILD.md](docs/BUILD.md) (LibreHardwareMonitor DLLs and PresentMon next to `build_qt.bat`).
 
 ```bat
 git clone https://github.com/unrealhamed/Lmonitor.git
@@ -89,8 +89,6 @@ python -m pip install -r requirements.txt
 :: new Qt interface (open the command prompt as Administrator for CPU temperature)
 python -m lmonitor.qt
 
-:: classic Tk interface
-python monitor.py
 ```
 
 `run_qt_dev.bat` starts the Qt interface without administrator rights (useful to look at the UI; CPU temperature will be missing). `run_qt_admin.bat` starts it elevated.
@@ -106,7 +104,6 @@ See [docs/BUILD.md](docs/BUILD.md). In short: `build_qt.bat` builds the program 
 | `lmonitor/engine.py` | the data engine: sensors, settings, history, sessions, diagnostics, optimizer, storage, reports (no window code) |
 | `lmonitor/backend.py` | headless layer between the engine and the interfaces |
 | `lmonitor/qt/` | the Qt (PySide6 + QML) interface - the main interface from v1.15 |
-| `monitor.py` | the classic Tk interface (still works, shares the same settings) |
 | `installer/` | Inno Setup script |
 | `tools/` | build helper (writes the version info of the exe) |
 | `tests/` | development tests (use stand-ins for tkinter / drivers; run `python tests/run_all.py`) |

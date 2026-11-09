@@ -19,7 +19,7 @@ Item {
     readonly property var s: backend.settings
     readonly property int g: Tokens.gap
 
-    function ghz(mhz) { return mhz ? (mhz / 1000).toFixed(1) + " GHz" : "" }
+    function ghz(mhz) { return mhz ? (mhz / 1000).toFixed(1) + Tr.t(" GHz") : "" }
     function go(name) { Window.window.goTo(name) }
     function worst(a, b) {
         var rank = {none: 0, ok: 1, low: 2, warm: 2, high: 3, hot: 3, full: 3}
@@ -33,20 +33,20 @@ Item {
     function tempLine() {
         if (!ready) return ""
         var p = []
-        if (cpuC.temp !== null && cpuC.temp !== undefined) p.push("CPU " + Math.round(cpuC.temp) + "°")
-        if (gpuC.temp !== null && gpuC.temp !== undefined) p.push("GPU " + Math.round(gpuC.temp) + "°")
-        return p.length ? p.join(" · ") : "No temperature sensor"
+        if (cpuC.temp !== null && cpuC.temp !== undefined) p.push(Tr.t("CPU ") + Math.round(cpuC.temp) + "°")
+        if (gpuC.temp !== null && gpuC.temp !== undefined) p.push(Tr.t("GPU ") + Math.round(gpuC.temp) + "°")
+        return p.length ? p.join(" · ") : Tr.t("No temperature sensor")
     }
 
     PageHeader {
         id: head
         width: parent.width
-        kicker: ready && d.pc ? d.pc : "This PC"
-        title: "Home"
+        kicker: ready && d.pc ? d.pc : Tr.t("This PC")
+        title: Tr.t("Home")
         Rectangle {
             width: 168; height: 42; radius: 12
             color: Tokens.fg(0.05); border.width: 1; border.color: Tokens.line
-            Text { x: 16; anchors.verticalCenter: parent.verticalCenter; text: "Overlay"
+            Text { x: 16; anchors.verticalCenter: parent.verticalCenter; text: Tr.t("Overlay")
                    color: Tokens.text; font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: true }
             ToggleSwitch { anchors.right: parent.right; anchors.rightMargin: 10
                            anchors.verticalCenter: parent.verticalCenter
@@ -64,22 +64,22 @@ Item {
     // ---- welcome
     Card {
         x: 0; y: page.bodyY; width: page.leftW; height: page.rowA; tint: true
-        Text { x: 22; y: 20; text: "Welcome back"; color: Tokens.sub
+        Text { x: 22; y: 20; text: Tr.t("Welcome back"); color: Tokens.sub
                font.family: Tokens.font; font.pixelSize: Tokens.fsBody }
         Text { x: 22; y: 40; width: parent.width - 44; elide: Text.ElideRight
-               text: page.ready && page.d.user ? page.d.user : "Gamer"
+               text: page.ready && page.d.user ? page.d.user : Tr.t("Gamer")
                color: Tokens.text; font.family: Tokens.font; font.pixelSize: 34; font.bold: true }
         Column {
             x: 22; y: 100; spacing: 12
             Repeater {
                 model: [
-                    {t: "Temperatures", s: page.tempStatus, sub: page.tempLine()},
-                    {t: "Memory", s: page.ready ? page.ramC.status || "none" : "none",
-                     sub: page.ready && page.ramC.used_gb !== undefined ? page.ramC.used_gb.toFixed(1) + " of " + Math.round(page.ramC.total_gb) + " GB used" : ""},
-                    {t: "Storage", s: page.ready ? page.diskC.status || "none" : "none",
-                     sub: page.ready && page.diskC.free_gb !== undefined ? Math.round(page.diskC.free_gb) + " GB free on " + page.diskC.mount : "No drive data"},
-                    {t: "FPS capture", s: page.ready ? (({ready: "ok", missing: "warm", idle: "none"})[page.st.fps] || "none") : "none",
-                     sub: page.ready ? (({ready: "Ready", missing: "Capture tool missing", idle: "Starts with a game"})[page.st.fps] || "") : ""}
+                    {t: Tr.t("Temperatures"), s: page.tempStatus, sub: page.tempLine()},
+                    {t: Tr.t("Memory"), s: page.ready ? page.ramC.status || "none" : "none",
+                     sub: page.ready && page.ramC.used_gb !== undefined ? page.ramC.used_gb.toFixed(1) + Tr.t(" of ") + Math.round(page.ramC.total_gb) + Tr.t(" GB used") : ""},
+                    {t: Tr.t("Storage"), s: page.ready ? page.diskC.status || "none" : "none",
+                     sub: page.ready && page.diskC.free_gb !== undefined ? Math.round(page.diskC.free_gb) + Tr.t(" GB free on ") + page.diskC.mount : Tr.t("No drive data")},
+                    {t: Tr.t("FPS capture"), s: page.ready ? (({ready: "ok", missing: "warm", idle: "none"})[page.st.fps] || "none") : "none",
+                     sub: page.ready ? (({ready: Tr.t("Ready"), missing: Tr.t("Capture tool missing"), idle: Tr.t("Starts with a game")})[page.st.fps] || "") : ""}
                 ]
                 Row {
                     spacing: 12
@@ -95,8 +95,8 @@ Item {
         }
         Row {
             x: 22; y: parent.height - 56; spacing: 10
-            Pill { label: "Performance"; onClicked: page.go("Performance") }
-            Pill { label: "Hardware"; onClicked: page.go("Hardware") }
+            Pill { label: Tr.t("Graphs"); onClicked: page.go("Graphs") }
+            Pill { label: Tr.t("Hardware"); onClicked: page.go("Hardware") }
         }
     }
 
@@ -118,14 +118,14 @@ Item {
         title: "RAM"
         model: page.ready && page.ramC.total_gb !== undefined ? Math.round(page.ramC.total_gb) + " GB" : ""
         info: page.ramC || ({})
-        detail: page.ready && page.ramC.used_gb !== undefined ? page.ramC.used_gb.toFixed(1) + " GB used" : ""
+        detail: page.ready && page.ramC.used_gb !== undefined ? page.ramC.used_gb.toFixed(1) + Tr.t(" GB used") : ""
     }
     HwCard {
         x: page.rx + page.w1 + page.w2 + 2 * page.g; y: page.bodyY; width: page.w2; height: page.hh
-        title: "Storage"
-        model: page.ready && page.diskC.mount ? "Drive " + page.diskC.mount : ""
+        title: Tr.t("Storage")
+        model: page.ready && page.diskC.mount ? Tr.t("Drive ") + page.diskC.mount : ""
         info: page.diskC || ({})
-        detail: page.ready && page.diskC.free_gb !== undefined ? Math.round(page.diskC.free_gb) + " GB free" : ""
+        detail: page.ready && page.diskC.free_gb !== undefined ? Math.round(page.diskC.free_gb) + Tr.t(" GB free") : ""
     }
     HwCard {
         x: page.rx; y: page.bodyY + page.hh + page.g; width: page.w1; height: page.hh
@@ -137,7 +137,7 @@ Item {
     Card {
         x: page.rx + page.w1 + page.g; y: page.bodyY + page.hh + page.g
         width: page.rightW - page.w1 - page.g; height: page.hh
-        Text { x: 18; y: 16; text: "Network"; color: Tokens.text
+        Text { x: 18; y: 16; text: Tr.t("Network"); color: Tokens.text
                font.family: Tokens.font; font.pixelSize: 18; font.bold: true }
         Text { anchors.right: parent.right; anchors.rightMargin: 18; y: 20
                text: "↓ " + (page.ready ? page.d.network.down : "--") + "   ↑ " + (page.ready ? page.d.network.up : "--")
@@ -162,7 +162,7 @@ Item {
     Card {
         x: Math.round(page.width * 0.58) + page.g / 2; y: page.bodyY + page.rowA + page.g
         width: page.width - x; height: page.rowB
-        Text { x: 20; y: 16; text: "Overlay"; color: Tokens.text
+        Text { x: 20; y: 16; text: Tr.t("Overlay"); color: Tokens.text
                font.family: Tokens.font; font.pixelSize: 18; font.bold: true }
         FitBar { x: 16; y: 50; width: parent.width - 32; height: 54
                  model: backend.overlay.groups.length > 0 ? backend.overlay : backend.preview
@@ -171,9 +171,9 @@ Item {
             x: 20; y: 120; width: parent.width - 40; spacing: 12
             Repeater {
                 model: [
-                    {t: "Show the overlay in games", k: "on", on: page.s.on, yes: true, no: false},
-                    {t: "Show only when I press F9", k: "show_mode", on: page.s.show_mode === "hotkey", yes: "hotkey", no: "always"},
-                    {t: "Liquid glass look", k: "look", on: page.s.look === "glass", yes: "glass", no: "dark"}
+                    {t: Tr.t("Show the overlay in games"), k: "on", on: page.s.on, yes: true, no: false},
+                    {t: Tr.t("Show only when I press F9"), k: "show_mode", on: page.s.show_mode === "hotkey", yes: "hotkey", no: "always"},
+                    {t: Tr.t("Liquid glass look"), k: "look", on: page.s.look === "glass", yes: "glass", no: "dark"}
                 ]
                 Item {
                     width: parent.width; height: 28
@@ -185,7 +185,7 @@ Item {
                 }
             }
         }
-        Pill { x: 20; y: parent.height - 56; width: parent.width - 40; label: "All overlay settings  ›"
+        Pill { x: 20; y: parent.height - 56; width: parent.width - 40; label: Tr.t("All overlay settings  ›")
                onClicked: page.go("Overlay") }
     }
 }

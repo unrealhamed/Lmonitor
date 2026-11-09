@@ -12,7 +12,7 @@ Item {
     Component.onCompleted: backend.openHardware(page.tab, true)
     Component.onDestruction: backend.openHardware(0, false)
 
-    PageHeader { id: head; width: parent.width; kicker: "Everything about this PC"; title: "Hardware" }
+    PageHeader { id: head; width: parent.width; kicker: Tr.t("Everything about this PC"); title: Tr.t("Hardware") }
     Segmented {
         id: tabs; y: head.height + 12; width: Math.min(parent.width, 760)
         model: backend.hardwareTabs; index: page.tab

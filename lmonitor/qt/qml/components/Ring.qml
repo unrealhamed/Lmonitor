@@ -6,7 +6,7 @@ Item {
     id: root
     property var value: null
     property color color: Tokens.cyan
-    property string unitText: "Celsius"
+    property string unitText: Tr.t("Celsius")
     onValueChanged: cv.requestPaint()
     onColorChanged: cv.requestPaint()
     Canvas {
@@ -33,7 +33,7 @@ Item {
                text: root.value === null || root.value === undefined ? "--" : Math.round(root.value) + "°"
                color: Tokens.text; font.family: Tokens.font; font.pixelSize: 24; font.bold: true }
         Text { anchors.horizontalCenter: parent.horizontalCenter
-               text: root.value === null || root.value === undefined ? "no sensor" : root.unitText
+               text: root.value === null || root.value === undefined ? Tr.t("no sensor") : root.unitText
                color: Tokens.sub; font.family: Tokens.font; font.pixelSize: Tokens.fsSmall }
     }
 }

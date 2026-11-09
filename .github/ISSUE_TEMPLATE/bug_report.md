@@ -17,7 +17,7 @@ A clear description of the problem.
 
 **System**
 - Lmonitor version (see About page):
-- Interface: Qt (new) / Tk (classic)
+- Interface: Qt
 - Windows version (e.g. Windows 11 23H2):
 - CPU:
 - GPU:

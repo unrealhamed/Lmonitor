@@ -1,3 +1,4 @@
 module Lmonitor
 singleton Tokens 1.0 Tokens.qml
 singleton Clock 1.0 Clock.qml
+singleton Tr 1.0 Tr.qml

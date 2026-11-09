@@ -1,14 +1,14 @@
 import os as _os
 import sys, io, contextlib, time, json
 sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
-with contextlib.redirect_stdout(io.StringIO()):
-    from t_helpers import load, boot, flush, OUT
+sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "stubs"))
+sys.modules["tkinter"] = None
+import lmonitor.engine as m
 ok = bad = 0
 def chk(name, cond):
     global ok, bad
     if cond: ok += 1; print("PASS", name)
     else: bad += 1; print("FAIL", name)
-m = load()
 sys.modules["tkinter"] = None
 from lmonitor.backend import Backend
 from lmonitor import engine as E

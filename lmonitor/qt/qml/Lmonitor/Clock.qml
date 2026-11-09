@@ -1,15 +1,15 @@
 pragma Singleton
 import QtQuick
 
-// One shared timer for every sliding chart (instead of one animation per chart).
-// It only runs while the main window is visible and in front, so a minimized
-// window or a game in front costs nothing.
+// One shared per-frame clock for every moving chart (instead of one animation per chart).
+// It only runs while a page with moving charts is on screen, so a minimized window or a
+// page without charts costs nothing.
 QtObject {
     id: clk
     property real now: Date.now()
     property bool active: true
-    property Timer ticker: Timer {
-        interval: 40; repeat: true; running: clk.active
+    property FrameAnimation ticker: FrameAnimation {
+        running: clk.active
         onTriggered: clk.now = Date.now()
     }
 }

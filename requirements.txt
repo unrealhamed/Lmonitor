@@ -1,11 +1,7 @@
-# Engine (used by both interfaces)
+# Engine
 psutil
 pythonnet
 nvidia-ml-py
 
 # Qt interface (main interface from v1.15). The lower limit is the author's choice, not tested.
 PySide6>=6.6
-
-# Classic Tk interface (monitor.py)
-pillow
-pystray

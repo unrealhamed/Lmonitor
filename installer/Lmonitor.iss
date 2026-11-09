@@ -1,5 +1,5 @@
 ; Inno Setup script for Lmonitor (Inno Setup 6.3 or newer)
-; Built by build_installer_qt.bat (Qt) or build_installer.bat (classic Tk):
+; Built by build_installer_qt.bat:
 ;   ISCC /DAppVersion=x.y.z [/DSourceDir=...] installer\Lmonitor.iss
 ;
 ; Settings live in %APPDATA%\Lmonitor. The installer never writes there and

@@ -12,7 +12,7 @@ Everything here is for **Windows 10 / 11, 64-bit**. The build scripts were writt
 | **Sensor files** (below) | put them in the project folder, next to `build_qt.bat` |
 
 ### Sensor files (not stored in this repository)
-These third-party files are **not** in the repository (see `docs/THIRD_PARTY.md`). Put them in the project's main folder, next to `monitor.py`:
+These third-party files are **not** in the repository (see `docs/THIRD_PARTY.md`). Put them in the project's main folder, next to `build_qt.bat`:
 
 ```
 LibreHardwareMonitorLib.dll
@@ -37,7 +37,6 @@ These files are listed in `.gitignore`, so Git never uploads them by mistake.
 ```bat
 python -m pip install -r requirements.txt
 python -m lmonitor.qt          :: Qt interface (open the prompt as Administrator for CPU temperature)
-python monitor.py              :: classic Tk interface
 ```
 
 ## 3. Build the program (Qt, recommended)
@@ -62,11 +61,6 @@ Upload this file to **GitHub Releases** (see `docs/RELEASING.md`), not to the re
 
 The installer keeps the same `AppId` as older versions, so it updates an existing installation. It never writes to `%APPDATA%\Lmonitor`; on uninstall it asks whether to delete your settings (default: keep).
 
-## 5. Classic Tk version
-
-`build.bat` and `build_installer.bat` do the same for the classic window (`monitor.py`). Both builds use the name `Lmonitor.exe` and the same installer `AppId`, so **install only one of them**.
-
 ## Status (what is not verified)
-- `build.bat` / `build_installer.bat` (Tk): used by the author for the v1.13 line. (Unverified here: whether an installer was published on GitHub.)
 - `build_qt.bat` / `build_installer_qt.bat` (Qt): written for v1.15. At the time this package was prepared the first Qt build had hit a *locked old build folder* error (a running copy of the program) that the script now handles; a finished Qt build and installer have **not** been confirmed by the author yet.
 - The tests in `tests/` do not build anything.

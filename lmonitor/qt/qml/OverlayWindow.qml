@@ -12,7 +12,7 @@ Window {
     color: "transparent"
     width: bar.implicitWidth
     height: bar.implicitHeight
-    title: "Lmonitor overlay"
+    title: Tr.t("Lmonitor overlay")
 
     OverlayBar {
         id: bar

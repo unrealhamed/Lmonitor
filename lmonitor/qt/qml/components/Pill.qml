@@ -14,7 +14,7 @@ Rectangle {
            : (ma.containsMouse ? Tokens.fg(0.10) : Tokens.fg(0.06)))
     border.width: primary ? 0 : 1
     border.color: danger ? Tokens.danger : Tokens.line
-    Text { id: txt; anchors.centerIn: parent; text: root.label
+    Text { id: txt; anchors.centerIn: parent; text: Tr.t(root.label)
            color: root.primary ? Tokens.accentText : Tokens.text
            font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: true }
     MouseArea { id: ma; anchors.fill: parent; hoverEnabled: true

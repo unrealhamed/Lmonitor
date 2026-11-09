@@ -28,7 +28,7 @@ Item {
 
     property real t0: 0
     readonly property real progress: !slide || t0 <= 0 || interval <= 0 ? 0
-        : Math.min(1, (Clock.now - t0) / (interval * 0.95))
+        : Math.max(0, Math.min(1, (Clock.now - t0) / interval))
     Canvas {
         id: cv
         x: -root.step * root.progress

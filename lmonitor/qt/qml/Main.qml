@@ -21,8 +21,8 @@ Window {
     // header rows have no page; the rest are pages in this order
     readonly property var nav: [
         {head: "MAIN"},
-        {label: "Home", src: "pages/Dashboard.qml"},
-        {label: "Performance", src: "pages/PerformancePage.qml"},
+        {label: "Home", src: "pages/Dashboard.qml", live: true},
+        {label: "Graphs", src: "pages/GraphsPage.qml", live: true},
         {label: "Hardware", src: "pages/HardwarePage.qml"},
         {head: "GAMING"},
         {label: "Overlay", src: "pages/OverlayPage.qml"},
@@ -47,10 +47,11 @@ Window {
     onPageChanged: tools.setPage(pages[page].tool || "")
 
     // Nothing is prepared or animated while the window is hidden or minimized,
-    // and the charts only slide while this window is in front.
+    // and the per-frame clock only runs on a page with moving charts.
     readonly property bool shown: visible && visibility !== Window.Minimized && visibility !== Window.Hidden
     onShownChanged: backend.setUiVisible(shown)
-    Binding { target: Clock; property: "active"; value: win.shown && Qt.application.state === Qt.ApplicationActive }
+    Binding { target: Tr; property: "lang"; value: backend.settings.language || "en" }
+    Binding { target: Clock; property: "active"; value: win.shown && win.pages[win.page].live === true }
 
     Rectangle {
         anchors.fill: parent
@@ -77,7 +78,7 @@ Window {
                     width: parent.width; height: modelData.label === undefined ? (modelData.head === "" ? 8 : 24) : 40
                     Text { visible: modelData.label === undefined && modelData.head !== ""
                            x: 12; anchors.bottom: parent.bottom; anchors.bottomMargin: 2
-                           text: modelData.head || ""; color: Tokens.dim
+                           text: Tr.t(modelData.head); color: Tokens.dim
                            font.family: Tokens.font; font.pixelSize: 10; font.bold: true; font.letterSpacing: 1 }
                     SideButton { visible: modelData.label !== undefined; width: parent.width; height: 40
                                  label: modelData.label || ""; active: win.page === parent.pageIndex
@@ -88,7 +89,7 @@ Window {
         Card {
             x: 10; y: parent.height - 94; width: parent.width - 20; height: 84
             Text { x: 14; y: 14; color: backend.update.state === "available" ? Tokens.accent : Tokens.dim
-                   text: backend.update.state === "available" ? "Update available: " + backend.update.version : "Version"
+                   text: backend.update.state === "available" ? Tr.t("Update available: ") + backend.update.version : Tr.t("Version")
                    font.family: Tokens.font; font.pixelSize: Tokens.fsSmall
                    font.bold: backend.update.state === "available"
                    MouseArea { anchors.fill: parent; enabled: backend.update.state === "available"
@@ -111,10 +112,10 @@ Window {
     Card {                                  // shown instead of a blank page when a page cannot load
         visible: content.status === Loader.Error
         x: content.x; y: content.y + 20; width: Math.min(content.width, 820); height: Math.min(content.height - 40, 420)
-        Text { x: 20; y: 16; text: "This page could not be loaded"; color: Tokens.danger
+        Text { x: 20; y: 16; text: Tr.t("This page could not be loaded"); color: Tokens.danger
                font.family: Tokens.font; font.pixelSize: 18; font.bold: true }
         Text { x: 20; y: 50; width: parent.width - 40; height: parent.height - 66; wrapMode: Text.WrapAnywhere
-               elide: Text.ElideRight; color: Tokens.sub; text: backend.qmlErrors || "See the console window."
+               elide: Text.ElideRight; color: Tokens.sub; text: backend.qmlErrors || Tr.t("See the console window.")
                font.family: "Consolas"; font.pixelSize: 11 }
     }
 }

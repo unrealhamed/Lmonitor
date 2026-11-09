@@ -13,14 +13,14 @@ Card {
     Column {
         id: col; x: 20; y: 12; width: parent.width - 80; spacing: 4
         Text { width: parent.width; elide: Text.ElideRight; color: Tokens.text
-               text: root.result ? root.result.title : ""
+               text: root.result ? Tr.t(root.result.title) : ""
                font.family: Tokens.font; font.pixelSize: 15; font.bold: true }
         Text { visible: !!(root.result && (root.result.before || root.result.after)); width: parent.width
                wrapMode: Text.Wrap; color: Tokens.sub
                text: root.result ? ((root.result.before || "") + (root.result.after ? "   →   " + root.result.after : "")) : ""
                font.family: Tokens.font; font.pixelSize: Tokens.fsBody }
         Text { width: parent.width; wrapMode: Text.Wrap; color: Tokens.dim
-               text: root.result && root.result.message ? root.result.message : ""
+               text: root.result && root.result.message ? Tr.t(root.result.message) : ""
                font.family: Tokens.font; font.pixelSize: Tokens.fsSmall }
     }
     Text { anchors.right: parent.right; anchors.rightMargin: 18; y: 10; text: "✕"; color: Tokens.dim

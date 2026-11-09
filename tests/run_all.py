@@ -1,9 +1,9 @@
 """Runs every test script in this folder and prints a summary.
 
 usage:  python tests/run_all.py
-The tests use small stand-ins for tkinter / pynvml / clr / pystray (tests/stubs),
+The tests use small stand-ins for pynvml / clr (tests/stubs),
 so they do not need a GPU, a display or Windows-only drivers.
-Needs:  pip install psutil pillow
+Needs:  pip install psutil PySide6
 """
 import glob
 import os

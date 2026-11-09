@@ -41,6 +41,14 @@ QtObject {
     readonly property int fsBody: 13
     readonly property int fsSmall: 11
 
+    function fmtNet(bps, unit) {        // the same text as the overlay (engine.fmt_net)
+        if (bps === null || bps === undefined) return "--"
+        if (unit === "bits") {
+            var bits = bps * 8
+            return bits >= 1e6 ? (bits / 1e6).toFixed(1) + "Mbps" : (bits / 1e3).toFixed(0) + "Kbps"
+        }
+        return bps >= 1048576 ? (bps / 1048576).toFixed(1) + "MB/s" : (bps / 1024).toFixed(0) + "KB/s"
+    }
     function sevColor(s) {
         return s === "warn" ? danger : s === "notice" ? warn : s === "ok" ? green
              : s === "info" ? cyan : dim
@@ -51,7 +59,7 @@ QtObject {
              : s === "ok" ? green : dim
     }
     function statusText(s) {
-        return ({ok: "Optimal", warm: "Warm", hot: "Hot", high: "High load",
-                 low: "Low space", full: "Almost full"})[s] || "No data"
+        return Tr.t(({ok: "Optimal", warm: "Warm", hot: "Hot", high: "High load",
+                      low: "Low space", full: "Almost full"})[s] || "No data")
     }
 }

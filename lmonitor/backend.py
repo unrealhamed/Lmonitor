@@ -5,10 +5,12 @@ and reads plain dictionaries from ``dashboard()``. Nothing here imports a UI
 toolkit, and nothing here blocks on the UI thread's behalf.
 """
 import getpass
+import math
 import platform
 import time
 from copy import deepcopy
 
+from lmonitor.graphs import GraphHistory
 from lmonitor.engine import (AppInfo, CardStatus, ChangeLog, Optimizer, Reports, SessionRecorder,
                              SessionStore, SessionView, Storage, fmt_size, pretty_name, Metrics, OverlayModel, CpuReader, DiagAnalyzer,
                              DiagRunner, FpsMonitor, GpuReader, LibreHardwareHost,
@@ -19,10 +21,7 @@ from lmonitor.engine import (AppInfo, CardStatus, ChangeLog, Optimizer, Reports,
 HW_TABS = (("CPU / GPU", "rows_processor"), ("Memory", "rows_memory"),
            ("Storage", "rows_storage"), ("Network", "rows_network"),
            ("Sensors", "rows_sensors"), ("System", "rows_system"))
-CHARTS = (("g_use", "GPU usage", "%"), ("c_use", "CPU usage", "%"),
-          ("g_temp", "GPU temperature", "°C"), ("c_temp", "CPU temperature", "°C"),
-          ("r_use", "RAM usage", "%"))
-HIST = 60            # samples shown in a card sparkline
+HIST = 62            # samples for a sparkline: 60 shown + the ones sliding in and out
 RANGES = (("1 min", 60), ("5 min", 300), ("1 hr", 3600), ("24 hr", 86400))
 
 
@@ -37,6 +36,8 @@ class Backend:
         self.memory = MemoryReader()
         self.fps = FpsMonitor()
         self.recorder = Recorder(self.gpu)
+        self.graphs = GraphHistory()
+        self.graph_fans = False         # fan RPM is read only while the Graphs page is open
         self.scanner = DiagRunner(ScanStore())
         self.telemetry = Telemetry(self.host, self.cpu, self.gpu, self.memory)
         self.telemetry.set_interval(self.settings["refresh"])
@@ -59,6 +60,21 @@ class Backend:
         """One telemetry reading (call from a worker thread, never the UI)."""
         self.telemetry.sample()
         self.recorder.tick(self.telemetry.snap)     # reuses this reading
+        fans = ({n: v for _, _, st, n, v in self.telemetry.sensors.read() if st == "Fan"}
+                if self.graph_fans else None)
+        self.graphs.add(self.telemetry.snap, fans, time.time())
+
+    def graph_series(self, seconds):
+        """60 visible slots plus some kept outside the chart, so a new point is already
+        drawn before it scrolls into view. Anchored on the newest reading, so the last
+        slot always holds a value."""
+        width = seconds / 60
+        late = self.telemetry.interval * 1.2         # how long a reading may take to arrive
+        extra = math.ceil(late / width) + 3
+        s = self.graphs.series(width * (60 + extra), 60 + extra, self.graphs.latest() or time.time(),
+                               max(GraphHistory.MAX_GAP, self.telemetry.interval * 2.2))
+        s["extra"], s["delay_ms"] = extra, (width + late) * 1000.0
+        return s
 
     # ---- read side (cheap, no hardware access)
     def version(self):
@@ -173,23 +189,18 @@ class Backend:
         """[cpu, ram, gpu] series for the big chart (oldest first)."""
         sec = RANGES[range_index][1]
         if range_index == 0:
-            n = max(8, int(sec / self.telemetry.interval))
+            # two more than shown: the oldest point must still exist while it slides out
+            n = max(8, int(sec / self.telemetry.interval)) + 2
             return [list(self.telemetry.history[k])[-n:]
                     for k in ("c_use", "r_use", "g_use")]
         return self.recorder.series(sec)
 
-    # ---- hardware + charts pages
+    # ---- hardware page
     def hardware(self, tab):
         """Rows of one Hardware tab: ("head", t) / ("row", k, v[, color]) /
         ("bar", k, v, fraction). Reads cached telemetry only."""
         rows = getattr(self.telemetry, HW_TABS[tab][1])()
         return [list(r) for r in rows]
-
-    def charts(self):
-        """History of the Performance charts: [{key,title,unit,values}]."""
-        h = self.telemetry.history
-        return [{"key": k, "title": t, "unit": u, "values": list(h[k])}
-                for k, t, u in CHARTS]
 
     # ---- settings (validated by the engine, saved by the caller)
     def settings_view(self):

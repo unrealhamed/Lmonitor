@@ -1,6 +1,6 @@
 # Third-party software
 
-Lmonitor uses the following projects. **Their files are not stored in this repository.** The build scripts expect some of them next to `monitor.py` (see `docs/BUILD.md`), and the installer and the program bundle them. Licenses below were read from each project's GitHub page when this package was prepared; always check the project's own `LICENSE` before you redistribute.
+Lmonitor uses the following projects. **Their files are not stored in this repository.** The build scripts expect some of them next to `build_qt.bat` (see `docs/BUILD.md`), and the installer and the program bundle them. Licenses below were read from each project's GitHub page when this package was prepared; always check the project's own `LICENSE` before you redistribute.
 
 | Project | Used for | License | Status |
 |---|---|---|---|
