@@ -26,4 +26,4 @@ Gaming overlay + system monitor for Windows. Python engine + Qt (PySide6/QML) UI
 
 ## Open items
 - Owner uploads `Lmonitor_Setup_1.17.0.exe` as GitHub release `v1.17.0` themself.
-- README.md / README.fa.md status line still says v1.15.2; there is no `docs/RELEASE_NOTES_v1.17.0.md` yet.
+- Release text for v1.17.0: `docs/RELEASE_NOTES_v1.17.0.md`.

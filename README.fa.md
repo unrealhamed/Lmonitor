@@ -5,7 +5,7 @@
 
 [English](README.md) · [دانلود](https://github.com/unrealhamed/Lmonitor/releases) · [گزارش باگ](https://github.com/unrealhamed/Lmonitor/issues/new?template=bug_report.md) · [پیشنهاد قابلیت](https://github.com/unrealhamed/Lmonitor/issues/new?template=feature_request.md)
 
-> **وضعیت: نسخه‌ی اولیه (v1.15.2).** رابط جدید Qt و فایل نصب هنوز تازه‌اند و فقط توسط سازنده روی یک لپ‌تاپ ویندوز ۱۱ (کارت گرافیک NVIDIA + پردازنده‌ی Intel) آزمایش شده‌اند. روی سخت‌افزارهای دیگر ممکن است بعضی سنسورها `n/a` نشان بدهند. گزارش باگ خوش‌آمد است.
+> **وضعیت: نسخه‌ی اولیه (v1.17.0).** رابط جدید Qt و فایل نصب هنوز تازه‌اند و فقط توسط سازنده روی یک لپ‌تاپ ویندوز ۱۱ (کارت گرافیک NVIDIA + پردازنده‌ی Intel) آزمایش شده‌اند. روی سخت‌افزارهای دیگر ممکن است بعضی سنسورها `n/a` نشان بدهند. گزارش باگ خوش‌آمد است.
 
 ## تصاویر
 

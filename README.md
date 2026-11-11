@@ -5,7 +5,7 @@ It puts a small click-through bar over your game (FPS, 1% lows, CPU / GPU / RAM 
 
 [فارسی](README.fa.md) · [Download](https://github.com/unrealhamed/Lmonitor/releases) · [Report a bug](https://github.com/unrealhamed/Lmonitor/issues/new?template=bug_report.md) · [Request a feature](https://github.com/unrealhamed/Lmonitor/issues/new?template=feature_request.md)
 
-> **Status: early release (v1.15.2).** The new Qt interface and the installer are young and have been tested by the author on one Windows 11 laptop (NVIDIA GPU + Intel CPU). Some sensors may show `n/a` on other hardware. Bug reports are welcome.
+> **Status: early release (v1.17.0).** The new Qt interface and the installer are young and have been tested by the author on one Windows 11 laptop (NVIDIA GPU + Intel CPU). Some sensors may show `n/a` on other hardware. Bug reports are welcome.
 
 ## Screenshots
 
@@ -111,7 +111,7 @@ See [docs/BUILD.md](docs/BUILD.md). In short: `build_qt.bat` builds the program 
 
 ## Report a bug or suggest a feature
 
-Open an [issue](https://github.com/unrealhamed/Lmonitor/issues). For bugs please include your Windows version, GPU / CPU model, the Lmonitor version (sidebar or *About*) and, if they exist, the files `error.log` / `qt_error.log` in `%APPDATA%\Lmonitor`. Saving a *sensor report* from the tray menu of the classic interface helps with missing sensors.
+Open an [issue](https://github.com/unrealhamed/Lmonitor/issues). For bugs please include your Windows version, GPU / CPU model, the Lmonitor version (sidebar or *About*) and, if they exist, the files `error.log` / `qt_error.log` in `%APPDATA%\Lmonitor`.
 
 ## Contributing
 
