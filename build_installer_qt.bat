@@ -18,6 +18,17 @@ for %%R in ("%ProgramFiles(x86)%" "%ProgramFiles%" "%LocalAppData%\Programs") do
     )
 )
 if not defined ISCC where ISCC.exe >nul 2>&1 && set "ISCC=ISCC.exe"
+rem installed in another folder (for example D:\App\InnoSetup6): ask Windows where
+if not defined ISCC (
+    for /f "tokens=2,*" %%A in ('reg query "HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Inno Setup 6_is1" /v InstallLocation 2^>nul ^| find "InstallLocation"') do (
+        if exist "%%~B\ISCC.exe" set "ISCC=%%~B\ISCC.exe"
+    )
+)
+if not defined ISCC (
+    for /f "tokens=2,*" %%A in ('reg query "HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Inno Setup 6_is1" /v InstallLocation 2^>nul ^| find "InstallLocation"') do (
+        if exist "%%~B\ISCC.exe" set "ISCC=%%~B\ISCC.exe"
+    )
+)
 if not defined ISCC (
     echo Inno Setup 6 was not found.
     echo Install it from https://jrsoftware.org/isdl.php and run this file again.
@@ -38,7 +49,8 @@ set "PY=python"
 for /f "usebackq delims=" %%V in (`%PY% tools\make_version.py lmonitor\engine.py "%ROOT%_build_qt\version_info.txt"`) do set "VER=%%V"
 if not defined VER set "VER=1.0.0"
 
-if exist "%ROOT%_output" rmdir /s /q "%ROOT%_output"
+rem only the installer of this version is replaced; older ones stay for testing
+if exist "%ROOT%_output\Lmonitor_Setup_%VER%.exe" del /f /q "%ROOT%_output\Lmonitor_Setup_%VER%.exe"
 "%ISCC%" /Qp "/DAppVersion=%VER%" "/DSourceDir=..\_build_qt\dist\Lmonitor" "%ROOT%installer\Lmonitor.iss"
 if errorlevel 1 (
     echo Installer build failed. Send me the last lines above.

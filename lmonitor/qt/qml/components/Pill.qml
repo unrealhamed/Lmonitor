@@ -1,5 +1,6 @@
 import QtQuick
 import Lmonitor
+import "."                      // components/Text.qml: upright text in Persian
 
 // Button. primary = green, otherwise a quiet dark button.
 Rectangle {

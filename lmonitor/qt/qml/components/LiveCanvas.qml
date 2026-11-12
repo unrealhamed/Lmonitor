@@ -7,6 +7,13 @@ import Lmonitor
 // series: [[v, v, ...], ...] oldest first, null = no data.
 Item {
     id: root
+    // Persian: inside the mirrored main window this turns itself back, so time runs left to right
+    property bool upright: false
+    onUprightChanged: Tr.rev++                  // texts inside check their direction again
+    function checkUpright() { root.upright = Tr.rtl && root.parent !== null && Tr.mirrored(root.parent) }
+    transform: Scale { origin.x: root.width / 2; xScale: root.upright ? -1 : 1 }
+    Component.onCompleted: Qt.callLater(function () { root.checkUpright() })
+    Connections { target: Tr; function onLangChanged() { Qt.callLater(function () { root.checkUpright() }) } }
     property var series: []
     property var colors: []
     property real maxValue: 100

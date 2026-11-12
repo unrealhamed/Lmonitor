@@ -1,5 +1,6 @@
 import QtQuick
 import Lmonitor
+import "."                      // components/Text.qml: upright text in Persian
 
 // Small grey line above a big title; anything placed inside goes to the right.
 Item {

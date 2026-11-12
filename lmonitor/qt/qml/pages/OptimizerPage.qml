@@ -42,10 +42,10 @@ Item {
                                 Text { anchors.verticalCenter: parent.verticalCenter; text: Tr.t(modelData.title); color: Tokens.accent
                                        font.family: Tokens.font; font.pixelSize: 14; font.bold: true }
                                 ConfirmButton { anchors.right: parent.right; label: Tr.t("Apply"); ready: !page.busy && modelData.steps.length > 0
-                                                question: Tr.t("Apply ") + modelData.steps.length + Tr.t(" change(s)?")
+                                                question: Tr.line(Tr.t("Apply ") + modelData.steps.length + Tr.t(" change(s)?"))
                                                 onConfirmed: tools.optPreset(modelData.name) } }
                             Repeater { model: modelData.steps
-                                Text { width: parent.width; wrapMode: Text.Wrap; text: "•  " + modelData; color: Tokens.sub
+                                Text { width: parent.width; wrapMode: Text.Wrap; text: "•  " + Tr.t(modelData); color: Tokens.sub
                                        font.family: Tokens.font; font.pixelSize: Tokens.fsBody } }
                             Text { visible: modelData.steps.length === 0; text: Tr.t("Already set - nothing to change."); color: Tokens.dim
                                    font.family: Tokens.font; font.pixelSize: Tokens.fsBody }
@@ -118,7 +118,7 @@ Item {
                         model: page.o.startup || []
                         Item {
                             width: parent.width; height: 46
-                            Rectangle { visible: index > 0; width: parent.width; height: 1; color: "#1e1e23" }
+                            Rectangle { visible: index > 0; width: parent.width; height: 1; color: Tokens.line }
                             Column { anchors.verticalCenter: parent.verticalCenter; width: parent.width - 70; spacing: 1
                                 Text { width: parent.width; elide: Text.ElideRight; text: Tr.t(modelData.name); color: modelData.enabled ? Tokens.text : Tokens.dim
                                        font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: true }
@@ -142,7 +142,7 @@ Item {
                         model: page.o.history || []
                         Item {
                             width: parent.width; height: 54
-                            Rectangle { visible: index > 0; width: parent.width; height: 1; color: "#1e1e23" }
+                            Rectangle { visible: index > 0; width: parent.width; height: 1; color: Tokens.line }
                             Column { anchors.verticalCenter: parent.verticalCenter; width: parent.width - 90; spacing: 1
                                 Text { width: parent.width; elide: Text.ElideRight; text: Tr.t(modelData.title); color: Tokens.text
                                        font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: true }

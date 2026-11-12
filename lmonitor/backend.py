@@ -8,10 +8,11 @@ import getpass
 import math
 import platform
 import time
+import psutil
 from copy import deepcopy
 
 from lmonitor.graphs import GraphHistory
-from lmonitor.engine import (AppInfo, CardStatus, ChangeLog, Optimizer, Reports, SessionRecorder,
+from lmonitor.engine import (AppInfo, CardStatus, ChangeLog, CpuLoad, Hud, SafeMode, Optimizer, Reports, SessionRecorder,
                              SessionStore, SessionView, Storage, fmt_size, pretty_name, Metrics, OverlayModel, CpuReader, DiagAnalyzer,
                              DiagRunner, FpsMonitor, GpuReader, LibreHardwareHost,
                              Logger, MemoryReader, Recorder, ReportBuilder,
@@ -54,6 +55,32 @@ class Backend:
         self.sessions = SessionRecorder(self.fps, self.cpu, self.gpu, self.session_store,
                                         lambda: self.settings["sessions_on"])
         self._sys_cache, self._sys_t, self._fps_try = {}, 0.0, 0.0
+        # graph overlay: its own short history (5 min at most, 4 readings/s in real time)
+        self.hud_hist = GraphHistory(keys=self.HUD_KEYS, keep=330)
+        self._hud_t, self._hud_live = 0.0, {}
+        self._hud_load = CpuLoad()                  # its own CPU counters
+
+    # ---- anti-cheat safe mode (see engine.SafeMode)
+    safe_active, safe_game, _safe_t = False, "", 0.0
+
+    def safe_tick(self, now=None):
+        """Every 5 s: is a protected game running? Then stop using the sensor driver."""
+        now = time.monotonic() if now is None else now
+        if now - self._safe_t < 5.0 and self._safe_t:
+            return self.safe_active
+        self._safe_t = now
+        mode = self.settings["safe_mode"]
+        game = SafeMode.running() if mode == "auto" else ""
+        active = mode == "always" or bool(game)
+        self.safe_game = game
+        if active != self.safe_active:
+            self.safe_active = active
+            self.sessions.safe = active
+            if active:
+                self.host.suspend()
+            else:
+                self.host.resume()
+        return active
 
     # ---- worker-thread side
     def sample(self):
@@ -131,12 +158,15 @@ class Backend:
                        "fps": "ready" if fps.alive else (
                            "missing" if "not found" in (fps.status or "") else "idle")},
             "perf": self.perf(range_index),
+            "safe": {"active": self.safe_active, "game": self.safe_game},
         }
 
     def _cpu_note(self, temp):
         """Why the CPU temperature is missing (real reason), else ""."""
         if temp is not None:
             return ""
+        if self.safe_active:
+            return "Paused by anti-cheat safe mode"
         if not WinApi.is_admin():
             return "Run as administrator for CPU temperature"
         hint = self.telemetry._cpu_hint(None) or ""
@@ -219,6 +249,18 @@ class Backend:
         self.overlay_changed()
         return True
 
+    def set_many(self, values):
+        """Several settings that only make sense together (a saved place = monitor + x +
+        y + "custom"): all are put in first, then checked once. One at a time the check
+        would throw away an x that has no y yet."""
+        if any(k not in Settings.DEFAULTS for k in values):
+            return False
+        cfg = deepcopy(self.settings.data)
+        cfg.update(values)
+        self.settings.data.update(Settings._clean(cfg))
+        self.overlay_changed()
+        return True
+
     def set_show(self, key, on):
         if key not in Metrics.KEYS:
             return False
@@ -258,12 +300,17 @@ class Backend:
                  "dim": spec["DIM"], "light": light}
             base = spec["accent"] or Theme.VENDOR["accent"]
         chosen = dict((k, c) for k, _, c in Theme.UI_ACCENTS).get(accent)
+        if accent == "custom":
+            chosen = Theme.hue_hex(self.settings["ui_hue"])
         if chosen:
             base = chosen
         if d["light"]:
             base = Theme.mix(base, "#000000", 0.16)
         d["accent"] = base
         d["accentText"] = Theme._on_color(base)
+        d["radius"] = dict(Theme.UI_RADII)[self.settings["ui_radius"]]
+        d["font"] = self.settings["ui_font"]
+        d["zoom"] = self.settings["ui_scale"] / 100.0
         return d
 
     def set_order(self, order):
@@ -341,6 +388,119 @@ class Backend:
                            "items": rows,
                            "graph": any(it[0] == "graph" for it in vis)})
         return {"groups": groups, "graph": texts.get("__graph")}
+
+    # ================================================= graph overlay (HUD)
+    HUD_POINTS = 60                       # points per chart (the frame-time chart: 2x)
+    HUD_FLOOR = {"fps": 60, "ft": 20, "g_pow": 40, "c_pow": 30}   # smallest scale top
+
+    HUD_KEYS = ("fps", "ft", "g_temp", "c_temp", "g_use", "c_use", "r_use", "g_pow", "c_pow")
+    HUD_FAST = {"g_use": True, "g_temp": True, "g_pow": True, "g_clk": False, "g_mem": False}
+
+    hud_page_open = False               # the settings page shows a live preview
+
+    def _hud_active(self):
+        """Prefixes of the graph overlays that are switched on (all while the page is open)."""
+        S = self.settings
+        return [p for p in Settings.HUD_PREFIXES if S[p + "on"] or self.hud_page_open]
+
+    def hud_wants_fps(self):
+        return any(k in ("fps", "ft") for p in self._hud_active() for k in self.settings[p + "items"])
+
+    def hud_realtime(self):
+        return any(self.settings[p + "window"] == 0 for p in self._hud_active())
+
+    def hud_period(self):
+        """Seconds between two graph-overlay readings."""
+        return Hud.REALTIME_PERIOD if self.hud_realtime() else 1.0
+
+    def hud_tick(self, now=None):
+        """One graph-overlay reading when it is due (worker thread). Normal spans reuse the
+        dashboard's reading of each second; real time reads 4x a second, but only cheap
+        sources: NVML (NVIDIA), Windows CPU / RAM counters and PresentMon's frame list.
+        CPU temperature / power stay at the once-a-second sensor reading. -> True if read."""
+        now = time.time() if now is None else now
+        period = self.hud_period()
+        if now - self._hud_t < period * 0.85:
+            return False
+        since, self._hud_t = self._hud_t or now - period, now
+        live = self.telemetry.snap or {}
+        vals = {k: live.get(k) for k in ("g_temp", "c_temp", "g_use", "c_use", "r_use", "g_pow", "c_pow")}
+        if self.hud_realtime():
+            try:
+                use, temp, pw, _clk, _mem = self.gpu.read(self.HUD_FAST, nvml_only=True)
+                if self.gpu.available:
+                    vals.update(g_use=use, g_temp=temp, g_pow=pw)
+                vals["c_use"] = self._hud_load.read()
+                vals["r_use"] = psutil.virtual_memory().percent
+            except Exception:
+                Logger.error("hud fast read")
+        st = self.fps.recent_stats(since) if self.fps.alive else None
+        vals["fps"], vals["ft"] = (st if st else (None, None))
+        self.hud_hist.add(vals, None, now)
+        self._hud_live = vals
+        return True
+
+    @staticmethod
+    def _nice_max(vals, floor):
+        """Top of a scale: a round number a little above the data (never below `floor`)."""
+        m = max([v for v in vals if v is not None] or [0]) * 1.08
+        m = max(float(floor), m)
+        p = 10 ** math.floor(math.log10(m))
+        for f in (1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10):
+            if m <= f * p + 1e-9:
+                return f * p
+        return 10 * p
+
+    @staticmethod
+    def _hud_text(key, v):
+        if v is None:
+            return "--"
+        if key == "ft":
+            return f"{v:.1f}"
+        return f"{v:.0f}"
+
+    def hud_views(self):
+        """One view per graph overlay (1 and 2)."""
+        return [self.hud_view(p) for p in Settings.HUD_PREFIXES]
+
+    def hud_view(self, prefix="hud_"):
+        """What a graph overlay draws: one entry per chosen chart. Plain data; a missing
+        sensor gives "--" and an empty line (never a made-up number).
+
+        The charts sit on fixed time slots (like the Graphs page): `extra` slots are kept
+        outside the plot so a new point is already drawn before it scrolls into view;
+        end_ms / slot_ms / delay_ms let the overlay scroll smoothly between readings.
+        lo / hi are the real lowest / highest readings of the span (not slot averages)."""
+        S = self.settings
+        realtime = S[prefix + "window"] == 0
+        sec = Hud.REALTIME_SECONDS if realtime else S[prefix + "window"]
+        n = 40 if realtime else self.HUD_POINTS
+        w = sec / n
+        period = self.hud_period()            # readings come at the fastest overlay's pace
+        late = period * 1.5                                  # a reading may come this late
+        extra = math.ceil(late / w) + 2
+        now = time.time()
+        latest = self.hud_hist.latest() or now
+        gap = max(4 * period, 1.0) if realtime else GraphHistory.MAX_GAP
+        s = self.hud_hist.series(w * (n + extra), n + extra, latest, gap)
+        raw = self.hud_hist.raw(latest - sec)
+        accent, colors = Hud.theme(S[prefix + "theme"])
+        live = self._hud_live or {}
+        items = []
+        for i, key in enumerate(S[prefix + "items"]):
+            title, unit, fixed = Hud.ITEMS[key]
+            series = list(s.get(key) or [None] * (n + extra))
+            seen = [v[key] for _, v in raw if v.get(key) is not None]
+            items.append({"key": key, "title": title, "unit": unit,
+                          "text": self._hud_text(key, live.get(key)),
+                          "series": series,
+                          "max": fixed or self._nice_max(seen, self.HUD_FLOOR.get(key, 10)),
+                          "lo": self._hud_text(key, min(seen)) if seen else "--",
+                          "hi": self._hud_text(key, max(seen)) if seen else "--",
+                          "color": colors[i % len(colors)]})
+        return {"items": items, "accent": accent, "window": sec, "realtime": realtime,
+                "points": n, "extra": extra, "end_ms": s["end_ms"], "slot_ms": w * 1000.0,
+                "delay_ms": (w + late) * 1000.0}
 
     # ================================================= tools pages (plain data)
     @staticmethod

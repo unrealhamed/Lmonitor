@@ -266,6 +266,36 @@ Item {
                     }
                 }
             }
+            Card {                                 // anti-cheat safe mode
+                width: parent.width; height: safeCol.height + 36
+                readonly property var safe: backend.dashboard.safe || ({active: false, game: ""})
+                id: safeCard
+                Column {
+                    id: safeCol
+                    x: 20; y: 16; width: parent.width - 40; spacing: 12
+                    Text { text: Tr.t("Anti-cheat safe mode"); color: Tokens.text
+                           font.family: Tokens.font; font.pixelSize: 16; font.bold: true }
+                    Segmented { width: parent.width
+                                model: ["Automatic", "Always on", "Off"]
+                                index: ["auto", "always", "off"].indexOf(s.safe_mode)
+                                onPicked: function (i) { backend.setSetting("safe_mode", ["auto", "always", "off"][i]) } }
+                    Row { spacing: 8
+                        Rectangle { width: 9; height: 9; radius: 5; anchors.verticalCenter: parent.verticalCenter
+                                    color: safeCard.safe.active ? Tokens.accent : Tokens.dim }
+                        Text { color: safeCard.safe.active ? Tokens.text : Tokens.sub
+                               font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: safeCard.safe.active
+                               text: safeCard.safe.active
+                                     ? Tr.line(Tr.t("Active now") + (safeCard.safe.game ? "  ·  " + safeCard.safe.game : ""))
+                                     : Tr.t("Not active now") }
+                    }
+                    Text { width: parent.width; wrapMode: Text.WordWrap; color: Tokens.sub
+                           font.family: Tokens.font; font.pixelSize: Tokens.fsSmall
+                           text: Tr.t("Lmonitor never touches a game: it injects nothing and reads no game memory. But games with kernel anti-cheat (Warzone, Valorant, Fortnite...) can object to hardware-sensor drivers. While such a game runs, safe mode stops using the sensor driver, so CPU temperature, power and clock show -- until you close the game. FPS, GPU, RAM and the overlays keep working.") }
+                    Text { width: parent.width; wrapMode: Text.WordWrap; color: Tokens.dim
+                           font.family: Tokens.font; font.pixelSize: Tokens.fsSmall
+                           text: Tr.t("No tool can promise what an anti-cheat will accept. Use at your own risk.") }
+                }
+            }
             Pill { danger: true; label: Tr.t("Reset overlay settings"); onClicked: backend.resetSettings() }
         }
     }

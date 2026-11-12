@@ -1,5 +1,6 @@
 import QtQuick
 import Lmonitor
+import "."                      // components/Text.qml: upright text in Persian
 
 // The overlay bar. Used by the real overlay window AND the live previews, so
 // what you see in the settings is what the game shows.
@@ -9,6 +10,12 @@ import Lmonitor
 // change order glide to their new place.
 Item {
     id: bar
+    // Persian: inside the mirrored main window this turns itself back, so time runs left to right
+    property bool upright: false
+    onUprightChanged: Tr.rev++                  // texts inside check their direction again
+    function checkUpright() { bar.upright = Tr.rtl && bar.parent !== null && Tr.mirrored(bar.parent) }
+    transform: Scale { origin.x: bar.width / 2; xScale: bar.upright ? -1 : 1 }
+    Connections { target: Tr; function onLangChanged() { Qt.callLater(function () { bar.checkUpright() }) } }
     property var model: ({groups: [], graph: null})
     property var style: ({})
     readonly property bool horizontal: (style.layout || "h") === "h"
@@ -48,7 +55,7 @@ Item {
     }
     onModelChanged: sync()
     onStyleChanged: sync()
-    Component.onCompleted: sync()
+    Component.onCompleted: { sync(); Qt.callLater(function () { bar.checkUpright() }) }
     Timer { id: settle; interval: 450; onTriggered: bar.reorder = false }
     Transition { id: glide; NumberAnimation { properties: "x,y"; duration: 280; easing.type: Easing.OutCubic } }
 

@@ -1,5 +1,6 @@
 import QtQuick
 import Lmonitor
+import "."                      // components/Text.qml: upright text in Persian
 
 // Real-time performance: CPU / RAM / GPU lines and the time-range tabs.
 Card {
@@ -57,7 +58,7 @@ Card {
     }
     Repeater {                              // grid
         model: 3
-        Rectangle { x: 46; width: root.width - 46 - 16; height: 1; color: "#26262c"
+        Rectangle { x: 46; width: root.width - 46 - 16; height: 1; color: Tokens.line
                     y: 72 + Math.round((root.height - 72 - 18 - 1) * index / 2) }
     }
     LiveCanvas {

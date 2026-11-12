@@ -1,5 +1,6 @@
 import QtQuick
 import Lmonitor
+import "."                      // components/Text.qml: upright text in Persian
 
 // Graphs page chart: one or several lines that scroll at a constant speed.
 // A new point is drawn outside the plot and rolls in with the scroll, so nothing ever pops
@@ -61,11 +62,19 @@ Item {
     }
     Repeater {
         model: 3
-        Rectangle { x: root.leftGap; width: root.plotW; height: 1; color: "#26262c"
+        Rectangle { x: root.leftGap; width: root.plotW; height: 1; color: Tokens.line
                     y: Math.min(root.height - 1, Math.round(root.height * index / 2)) }
     }
 
     Item {
+        id: plotBox
+        // Persian: inside the mirrored main window this turns itself back, so time runs left to right
+        property bool upright: false
+        onUprightChanged: Tr.rev++                  // texts inside check their direction again
+        function checkUpright() { plotBox.upright = Tr.rtl && plotBox.parent !== null && Tr.mirrored(plotBox.parent) }
+        transform: Scale { origin.x: plotBox.width / 2; xScale: plotBox.upright ? -1 : 1 }
+        Component.onCompleted: Qt.callLater(function () { plotBox.checkUpright() })
+        Connections { target: Tr; function onLangChanged() { Qt.callLater(function () { plotBox.checkUpright() }) } }
         x: root.leftGap; width: root.plotW; height: root.height
         clip: true
         Canvas {

@@ -1,6 +1,6 @@
 # Screenshots
 
-Real screenshots of the current program (v1.15.2). Already here: `dashboard.png`, `overlay-settings.png`, `optimizer.png` (the startup-program list is blurred on purpose).
+Real screenshots of the program. Already here: `dashboard.png`, `overlay-settings.png`, `optimizer.png` (v1.15.2; the startup-program list is blurred on purpose), `graph-overlay.png` and `graph-overlay-hud.png` (v1.17.2, taken without administrator rights - no CPU temperature).
 
 ## How to take them
 1. Start Lmonitor, press `Win + Shift + S`, select the window and save the picture here as PNG.

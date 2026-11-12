@@ -18,7 +18,7 @@ from PySide6.QtGui import QDesktopServices, QFontDatabase
 
 from lmonitor.backend import HW_TABS, RANGES, Backend
 from lmonitor import updater
-from lmonitor.engine import AppInfo, Logger, Metrics, Theme
+from lmonitor.engine import AppInfo, Autostart, Hud, Logger, Metrics, Settings, Theme, WinApi
 from lmonitor.qt.tools import Tools
 
 
@@ -31,11 +31,19 @@ class Bridge(QObject):
     glassChanged = Signal()
     hardwareChanged = Signal()
     qmlErrorsChanged = Signal()
+    coveredChanged = Signal()
+    hudChanged = Signal()
+    hudStateChanged = Signal()
     _sampled = Signal(dict)            # worker thread -> UI thread
     _overlay_sampled = Signal(dict)
+    _hud_sampled = Signal(list)
+    _covered_seen = Signal(bool)
     updateChanged = Signal()
+    updateFound = Signal(str)          # a new version was just found (tray message)
+    autostartChanged = Signal()
     _update_done = Signal(dict)
 
+    HUD_EMPTY = {"items": [], "accent": "#35d6ff", "window": 60}
     FALLBACK_FONTS = ("Consolas", "Cascadia Mono", "Courier New")
 
     def __init__(self, backend: Backend, parent=None):
@@ -46,17 +54,25 @@ class Bridge(QObject):
         self._range = 0
         self._hw_tab, self._hw, self._hw_open = 0, [[], []], False
         self._glass = False
-        self._ui_visible = True
+        self._ui_visible = "--startup" not in sys.argv
+        self._autostart, self._autostart_err = None, ""
+        self._covered = False            # a full-screen program (game) is in front
+        self._active = True              # a Lmonitor window has the focus
         self._qml_errors = []
         self._set_cache = self._prev_cache = self._fonts = None
         self._last_texts = {}
         self.host = None                         # OverlayHost (set by app.py)
+        self.hud_hosts = []                      # HudHost x2: the graph overlays (set by app.py)
+        self._hud = [dict(self.HUD_EMPTY), dict(self.HUD_EMPTY)]
+        self._hud_page = False                   # the Graph overlay page is open (preview)
         self.tools = Tools(backend, self, self)
         self._stop = threading.Event()
         self._wake = threading.Event()
         self._sampled.connect(self._on_sampled)
         self._overlay_sampled.connect(self._on_overlay)
         self._update_done.connect(self._on_update)
+        self._covered_seen.connect(self._on_covered)
+        self._hud_sampled.connect(self._on_hud)
         self._upd = {"state": "idle", "text": ""}
         self._info = None
         self._threads = [
@@ -72,15 +88,52 @@ class Bridge(QObject):
         for t in self._threads:
             t.start()
         self.checkUpdate()
+        # ...and again every 3 hours while Lmonitor runs, so a release that comes out
+        # later is noticed without pressing "Check for updates"
+        self._upd_timer = QTimer(self)
+        self._upd_timer.setInterval(self.UPDATE_EVERY_MS)
+        self._upd_timer.timeout.connect(self._auto_check)
+        self._upd_timer.start()
 
     # ---- updates (GitHub Releases, see lmonitor/updater.py)
     @Property("QVariantMap", notify=updateChanged)
     def update(self):
         return self._upd
 
+    UPDATE_EVERY_MS = 3 * 3600 * 1000
+    _told = ""                               # version already announced
+
+    def _auto_check(self):
+        if self._upd["state"] in ("none", "error", "idle"):
+            self.checkUpdate()
+
+    @Property(bool, constant=True)
+    def startHidden(self):
+        """Started by Windows at sign-in: stay in the tray, no window."""
+        return "--startup" in sys.argv
+
+    @Property(bool, notify=autostartChanged)
+    def autostart(self):
+        if self._autostart is None:
+            self._autostart = Autostart.is_on()
+        return self._autostart
+
+    @Property(str, notify=autostartChanged)
+    def autostartError(self):
+        return self._autostart_err
+
+    @Slot(bool)
+    def setAutostart(self, on):
+        self._autostart_err = Autostart.set(bool(on))
+        self._autostart = Autostart.is_on()
+        self.autostartChanged.emit()
+
     def _on_update(self, d):
         self._upd = d
         self.updateChanged.emit()
+        if d["state"] == "available" and d.get("version") != self._told:
+            self._told = d.get("version") or ""
+            self.updateFound.emit(self._told)
         if d["state"] == "ready":                # installer downloaded and checked
             subprocess.Popen('cmd /c "%s"' % updater.install_command(d["path"], sys.executable),
                              creationflags=0x08000000 | 0x00000008)    # no window, detached
@@ -125,16 +178,29 @@ class Bridge(QObject):
     # ---- worker threads
     HIDDEN_PERIOD = 3.5        # s between samples while nobody looks (stays under the gap limit)
 
+    def _game_check(self):
+        """Is a full-screen program (a game) in front? Then the window is not drawn at
+        all, and while Lmonitor is not in front it runs in background mode."""
+        covered = WinApi.fullscreen_app()
+        if covered != self._covered:
+            self._covered = covered            # read by this thread right away
+            self._covered_seen.emit(covered)   # the QML side on the UI thread
+        WinApi.set_background_mode(not self._active)
+        return covered
+
     def _loop(self):
         while not self._stop.is_set():
             started = time.monotonic()
+            shown = self._ui_visible
             try:
+                covered = self._game_check()
+                shown = self._ui_visible and not covered
                 self._b.sample()
-                if self._ui_visible:            # nobody sees it otherwise: skip the work
+                if shown:                       # nobody sees it otherwise: skip the work
                     self._sampled.emit(self._b.dashboard(self._range))
             except Exception:
                 Logger.error("qt sampler")
-            busy = self._ui_visible or (self.host is not None and self.host.wanted())
+            busy = shown or (self.host is not None and self.host.wanted()) or self._hud_wanted()
             period = self._b.telemetry.interval if busy else self.HIDDEN_PERIOD
             # the time spent reading counts, so the readings stay evenly spaced
             self._wake.wait(max(0.05, period - (time.monotonic() - started)))
@@ -149,11 +215,15 @@ class Bridge(QObject):
             try:
                 b = self._b
                 wanted = self.host is not None and self.host.wanted()
+                hud = self._hud_wanted()
                 fps_in_bar = wanted and b.overlay_model.need().get("FPS")
                 now = time.monotonic()
                 if now - housekeeping >= 2.0:
                     housekeeping = now
-                    b.ensure_fps(fps_in_bar)
+                    was = b.safe_active
+                    if b.safe_tick() != was:            # anti-cheat safe mode switched
+                        self._wake.set()
+                    b.ensure_fps(fps_in_bar or (hud and b.hud_wants_fps()))
                     if b.settings["sessions_on"]:
                         b.sessions.tick()
                 if wanted:
@@ -161,9 +231,36 @@ class Bridge(QObject):
                     self._last_texts = texts
                     self._overlay_sampled.emit(b.overlay_view(texts))
                     wait = 0.5 if fps_in_bar else max(0.5, float(b.settings["refresh"]))
+                if hud or self._hud_page:
+                    # the graph overlay (or its settings page): new data once per reading -
+                    # once a second, or 4x a second in real time
+                    if b.hud_tick():
+                        self._hud_sampled.emit(b.hud_views())
+                    wait = min(wait, b.hud_period() / 3)
             except Exception:
                 Logger.error("qt overlay sampler")
             self._stop.wait(wait)
+
+    def _hud_wanted(self):
+        return any(h.wanted() for h in self.hud_hosts)
+
+    # ---- UI thread: game in front / focus
+    def _on_covered(self, covered):
+        self.coveredChanged.emit()
+        if not covered:
+            self._wake.set()                   # fresh numbers as soon as the game is gone
+
+    @Property(bool, notify=coveredChanged)
+    def covered(self):
+        """A full-screen program is in front: no chart animation, no window updates."""
+        return self._covered
+
+    def setAppActive(self, active):
+        """Called by app.py when a Lmonitor window gains / loses the focus."""
+        self._active = bool(active)
+        WinApi.set_background_mode(not self._active)
+        if active:
+            self._wake.set()
 
     # ---- UI thread: data
     def _on_sampled(self, data):
@@ -175,6 +272,114 @@ class Bridge(QObject):
     def _on_overlay(self, data):
         self._ov = data
         self.overlayChanged.emit()
+
+    # ---- graph overlays (HUD 1 and 2); n = 0 / 1
+    def _on_hud(self, data):
+        self._hud = data
+        self.hudChanged.emit()
+
+    @Property("QVariantList", notify=hudChanged)
+    def huds(self):
+        """Charts of both graph overlays (new data once per reading while one is shown)."""
+        return self._hud
+
+    def _hud_now(self):
+        try:
+            return self._b.hud_views()
+        except Exception:
+            Logger.error("hud preview")
+            return [dict(self.HUD_EMPTY), dict(self.HUD_EMPTY)]
+
+    @Slot(bool)
+    def setHudPageOpen(self, on):
+        """The settings page shows a live preview: read the HUD values while it is open."""
+        self._hud_page = self._b.hud_page_open = bool(on)
+        if on:
+            self._on_hud(self._hud_now())
+
+    @Property("QVariantList", notify=settingsChanged)
+    def hudStyles(self):
+        """Settings of each graph overlay under the same names (hud_items, hud_size...)."""
+        d = self._b.settings.data
+        return [{"hud_" + k[len(p):]: v for k, v in d.items() if k.startswith(p)}
+                for p in Settings.HUD_PREFIXES]
+
+    @Property("QVariantList", notify=hudStateChanged)
+    def hudStates(self):
+        """Per overlay: grab (takes the mouse now), shown, rel (place on its screen 0..1)."""
+        out = []
+        for i in range(len(Settings.HUD_PREFIXES)):
+            h = self.hud_hosts[i] if i < len(self.hud_hosts) else None
+            try:
+                rel = h.relative() if h else {"x": 1.0, "y": 0.0}
+            except Exception:
+                rel = {"x": 1.0, "y": 0.0}
+            out.append({"grab": bool(h and h.grab), "shown": bool(h and h.wanted()), "rel": rel})
+        return out
+
+    @Slot(int, str, "QVariant")
+    def setHudSetting(self, n, key, value):
+        """key is the plain name ("hud_size"); n picks the overlay."""
+        if not (0 <= n < len(Settings.HUD_PREFIXES)) or not key.startswith("hud_"):
+            return
+        self.setSetting(Settings.HUD_PREFIXES[n] + key[4:], value)
+
+    @Slot(int, float, float)
+    def placeHud(self, n, fx, fy):
+        """Dragged in the preview: put the overlay at this place of its screen (0..1)."""
+        if 0 <= n < len(self.hud_hosts):
+            self.hud_hosts[n].place(fx, fy)
+
+    @Property("QVariantList", constant=True)
+    def hudCatalog(self):
+        return [{"key": k, "title": Hud.ITEMS[k][0], "unit": Hud.ITEMS[k][1]} for k in Hud.ORDER]
+
+    @Property("QVariantList", constant=True)
+    def hudThemes(self):
+        return [{"key": k, "name": n, "accent": a, "colors": c} for k, n, a, c in Hud.THEMES]
+
+    @Property(int, constant=True)
+    def hudMaxItems(self):
+        return Hud.MAX_ITEMS
+
+    @Slot(int, str, bool)
+    def setHudItem(self, n, key, on):
+        if not (0 <= n < len(Settings.HUD_PREFIXES)):
+            return
+        name = Settings.HUD_PREFIXES[n] + "items"
+        items = list(self._b.settings[name])
+        if on and key not in items:
+            items.append(key)
+        elif not on and key in items and len(items) > 1:      # one chart always stays
+            items.remove(key)
+        if self._b.set_setting(name, items):
+            self.settingsTouched()
+
+    def hudShownChanged(self):
+        self.hudStateChanged.emit()
+
+    @Slot(int)
+    def resetHud(self, n):
+        if not (0 <= n < len(Settings.HUD_PREFIXES)):
+            return
+        p = Settings.HUD_PREFIXES[n]
+        for k, v in Settings.DEFAULTS.items():
+            if k.startswith(p):
+                self._b.set_setting(k, v)
+        self.settingsTouched()
+
+    # ---- window look (Personalize)
+    @Property("QVariantList", constant=True)
+    def uiScales(self):
+        return list(Theme.UI_SCALES)
+
+    @Property("QStringList", constant=True)
+    def uiFonts(self):
+        return list(Theme.UI_FONTS)
+
+    @Slot(int, result=str)
+    def hueHex(self, h):
+        return Theme.hue_hex(h)
 
     @Property("QVariantMap", notify=dashboardChanged)
     def dashboard(self):
@@ -343,6 +548,11 @@ class Bridge(QObject):
         self._save.start()
         if self.host:
             self.host.settingsChanged()
+        for h in self.hud_hosts:
+            h.settingsChanged()
+        if self.hud_hosts:
+            self.hudStateChanged.emit()
+            self._wake.set()                 # the sampler may need to run faster now
 
     @Slot(str, "QVariant")
     def setSetting(self, key, value):

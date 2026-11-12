@@ -65,6 +65,8 @@ Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags
 
 [UninstallRun]
 Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM {#AppExe}"; Flags: runhidden; RunOnceId: "KillLmonitor"
+; the "Start with Windows" task (if the user switched it on)
+Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""Lmonitor"" /F"; Flags: runhidden; RunOnceId: "LmonitorTask"
 
 [Code]
 function PawnIoInstalled(): Boolean;

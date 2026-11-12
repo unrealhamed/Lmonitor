@@ -11,13 +11,18 @@ import re
 import subprocess
 import sys
 
+import tempfile
+
 here = os.path.dirname(os.path.abspath(__file__))
 bad = []
+# the tests get their own settings folder, so they never touch the real
+# %APPDATA%\Lmonitor (settings.json, error.log) of the person running them
+env = dict(os.environ, APPDATA=tempfile.mkdtemp(prefix="lmonitor_tests_"), PYTHONIOENCODING="utf-8")
 for path in sorted(glob.glob(os.path.join(here, "test_*.py"))):
     name = os.path.basename(path)
     try:
         r = subprocess.run([sys.executable, "-u", path], capture_output=True,
-                           text=True, timeout=280, cwd=os.path.dirname(here))
+                           text=True, timeout=280, cwd=os.path.dirname(here), env=env)
         out = r.stdout + r.stderr
         failed = (r.returncode != 0 or re.search(r"^FAIL ", out, re.M)
                   or re.search(r"\b[1-9]\d* failed|FAILED: [1-9]|Traceback", out))

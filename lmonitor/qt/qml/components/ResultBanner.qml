@@ -1,5 +1,6 @@
 import QtQuick
 import Lmonitor
+import "."                      // components/Text.qml: upright text in Persian
 
 // What the last action did: title, before -> after, message. Shown until closed.
 Card {
@@ -17,7 +18,7 @@ Card {
                font.family: Tokens.font; font.pixelSize: 15; font.bold: true }
         Text { visible: !!(root.result && (root.result.before || root.result.after)); width: parent.width
                wrapMode: Text.Wrap; color: Tokens.sub
-               text: root.result ? ((root.result.before || "") + (root.result.after ? "   →   " + root.result.after : "")) : ""
+               text: root.result ? (Tr.t(root.result.before || "") + (root.result.after ? (Tr.rtl ? "   ←   " : "   →   ") + Tr.t(root.result.after) : "")) : ""
                font.family: Tokens.font; font.pixelSize: Tokens.fsBody }
         Text { width: parent.width; wrapMode: Text.Wrap; color: Tokens.dim
                text: root.result && root.result.message ? Tr.t(root.result.message) : ""

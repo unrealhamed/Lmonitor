@@ -1,5 +1,6 @@
 import QtQuick
 import Lmonitor
+import "."                      // components/Text.qml: upright text in Persian
 
 // Two-step button for anything that changes the PC: first click asks
 // "Are you sure?", second click does it. Cancels itself after 6 seconds.

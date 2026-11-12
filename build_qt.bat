@@ -52,7 +52,9 @@ if defined MISSING (
 )
 
 echo Checking Python libraries...
-%PY% -m pip install --quiet --upgrade pyinstaller psutil pythonnet nvidia-ml-py PySide6
+rem PySide6-Essentials holds every Qt part Lmonitor uses (the full PySide6 adds ~200 MB
+rem of add-ons it never loads). Already installed = no download.
+%PY% -m pip install --quiet pyinstaller psutil pythonnet nvidia-ml-py PySide6-Essentials
 if errorlevel 1 (
     echo pip failed - check your internet connection.
     if not "%1"=="nopause" pause

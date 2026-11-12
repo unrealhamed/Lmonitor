@@ -51,8 +51,8 @@ Item {
                     Text { text: modelData.when + "  ·  " + modelData.duration; color: Tokens.dim
                            font.family: Tokens.font; font.pixelSize: 10 }
                     Text { color: Tokens.sub; font.family: Tokens.font; font.pixelSize: Tokens.fsSmall
-                           text: (modelData.avg_fps !== null && modelData.avg_fps !== undefined ? Math.round(modelData.avg_fps) + Tr.t(" FPS avg") : Tr.t("FPS n/a"))
-                                 + (modelData.low1 !== null && modelData.low1 !== undefined ? Tr.t("  ·  1% low ") + Math.round(modelData.low1) : "") } }
+                           text: Tr.line((modelData.avg_fps !== null && modelData.avg_fps !== undefined ? Math.round(modelData.avg_fps) + Tr.t(" FPS avg") : Tr.t("FPS n/a"))
+                                 + (modelData.low1 !== null && modelData.low1 !== undefined ? Tr.t("  ·  1% low ") + Math.round(modelData.low1) : "")) } }
                 MouseArea { id: ma; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                             onClicked: page.sel = modelData.id }
             }

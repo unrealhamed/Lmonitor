@@ -100,6 +100,8 @@ def _run():
     else:
         WinApi.ensure_admin()          # sensors need admin (same as the Tk app)
     WinApi.single_instance()           # a second copy just exits (same as the Tk app)
+    from lmonitor.qt import gpu_pick
+    gpu_note = gpu_pick.apply()        # draw on the screen's GPU, not the game's GPU
     app = QApplication(sys.argv)
     app.setApplicationName("Lmonitor")
     app.setQuitOnLastWindowClosed(False)   # closing the window keeps the overlay + tray
@@ -127,7 +129,37 @@ def _run():
               "The main window still works.")
     else:
         host.attach(engine.rootObjects()[1])
+    from lmonitor.qt.overlay import HudHost      # the two graph overlays
+    for i in range(2):
+        hud = HudHost(bridge, backend, i)
+        before = len(engine.rootObjects())
+        engine.load(QUrl.fromLocalFile(os.path.join(qml_dir(), "HudWindow.qml")))
+        if len(engine.rootObjects()) > before:
+            win = engine.rootObjects()[-1]
+            win.setProperty("slot", i)
+            bridge.hud_hosts.append(hud)
+            hud.attach(win)
+        else:
+            _fail("The graph overlay failed to load (see the QML errors above). "
+                  "The main window still works.")
+            break
+    if not ico.isNull():                         # taskbar / Alt+Tab icon of the main window
+        engine.rootObjects()[0].setIcon(ico)
     app.aboutToQuit.connect(bridge.stop)
+    from PySide6.QtCore import Qt
+    app.applicationStateChanged.connect(       # focus lost: background mode (see bridge)
+        lambda st: bridge.setAppActive(st == Qt.ApplicationState.ApplicationActive))
+    if "failed" in gpu_note:
+        from lmonitor.engine import Logger
+        Logger.error("start", gpu_note)
     tray = _make_tray(app, engine.rootObjects()[0], bridge, backend, ico)
+    if tray is not None:                         # a new version: say so next to the clock too
+        def told(version):
+            fa = backend.settings["language"] == "fa"
+            tray.showMessage("Lmonitor",
+                             ("نسخهٔ جدید %s آماده است. برای نصب، Lmonitor را باز کن." if fa else
+                              "Version %s is available. Open Lmonitor to install it.") % version,
+                             QSystemTrayIcon.MessageIcon.Information, 8000)
+        bridge.updateFound.connect(told)
     bridge.start()
     return app.exec()

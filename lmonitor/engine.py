@@ -158,11 +158,50 @@ class Theme:
         ("aurora", "Aurora", "Violet dusk with a mint glow (my own design)",
          {"C_BG": "#150f26", "C_SIDE": "#0f0a1d", "C_CARD": "#1f1737",
           "C_TRACK": "#33295a", "SUB": "#aaa0cf", "TXT": "#f5f1ff",
-          "DIM": "#7f75a8", "light": False, "accent": "#2ee6c5"}))
+          "DIM": "#7f75a8", "light": False, "accent": "#2ee6c5"}),
+        ("carbon", "Carbon", "Pure black for OLED screens",
+         {"C_BG": "#000000", "C_SIDE": "#060607", "C_CARD": "#0e0e10",
+          "C_TRACK": "#222228", "SUB": "#9a9aa5", "TXT": "#f5f5f7",
+          "DIM": "#6a6a75", "light": False, "accent": None}),
+        ("crimson", "Crimson", "Dark red, made for late-night gaming",
+         {"C_BG": "#140a0c", "C_SIDE": "#0e0608", "C_CARD": "#1e1014",
+          "C_TRACK": "#3a1e26", "SUB": "#c9a3ab", "TXT": "#fff1f3",
+          "DIM": "#8f6b73", "light": False, "accent": "#ff4d6d"}),
+        ("ocean", "Ocean", "Deep sea blue with a cyan glow",
+         {"C_BG": "#07141a", "C_SIDE": "#050e13", "C_CARD": "#0d1f28",
+          "C_TRACK": "#1c3a48", "SUB": "#93b4c2", "TXT": "#eaf7fc",
+          "DIM": "#5f8494", "light": False, "accent": "#22d3ee"}),
+        ("sunset", "Sunset", "Warm brown and orange",
+         {"C_BG": "#1a0f0a", "C_SIDE": "#120a06", "C_CARD": "#261710",
+          "C_TRACK": "#45291b", "SUB": "#d1ac98", "TXT": "#fff4ec",
+          "DIM": "#96705c", "light": False, "accent": "#ff8a3d"}),
+        ("forest", "Forest", "Dark green, calm",
+         {"C_BG": "#0b1410", "C_SIDE": "#070e0b", "C_CARD": "#12201a",
+          "C_TRACK": "#223a2f", "SUB": "#9dbfae", "TXT": "#eefaf3",
+          "DIM": "#65887a", "light": False, "accent": "#4ade80"}),
+        ("paper", "Paper", "Warm light theme",
+         {"C_BG": "#f4efe6", "C_SIDE": "#e9e2d6", "C_CARD": "#fffdf8",
+          "C_TRACK": "#dcd3c3", "SUB": "#6b6254", "TXT": "#1f1a12",
+          "DIM": "#8d8473", "light": True, "accent": "#c2410c"}))
     UI_ACCENTS = (("auto", "Auto", None), ("green", "Green", "#76b900"),
                   ("blue", "Blue", "#4f8cff"), ("violet", "Violet", "#8b5cf6"),
                   ("pink", "Pink", "#ec4899"), ("orange", "Orange", "#f97316"),
-                  ("teal", "Teal", "#14b8a6"))
+                  ("teal", "Teal", "#14b8a6"), ("red", "Red", "#ef4444"),
+                  ("rose", "Rose", "#f43f5e"), ("gold", "Gold", "#f59e0b"),
+                  ("yellow", "Yellow", "#eab308"), ("lime", "Lime", "#84cc16"),
+                  ("mint", "Mint", "#2dd4bf"), ("cyan", "Cyan", "#06b6d4"),
+                  ("indigo", "Indigo", "#6366f1"), ("silver", "Silver", "#cbd5e1"),
+                  ("custom", "Custom", None))
+    UI_SCALES = (90, 100, 110, 120)                 # % size of the whole window
+    UI_RADII = (("sharp", 4), ("soft", 10), ("round", 16))
+    UI_FONTS = ("Segoe UI", "Bahnschrift", "Tahoma", "Verdana", "Calibri", "Consolas")
+
+    @staticmethod
+    def hue_hex(h):
+        """A bright color of this hue (0-359) for the custom accent."""
+        import colorsys
+        r, g, b = colorsys.hls_to_rgb((int(h) % 360) / 360.0, 0.58, 0.85)
+        return "#%02x%02x%02x" % (int(r * 255), int(g * 255), int(b * 255))
 
     @classmethod
     def apply_vendor(cls, vendor):
@@ -293,6 +332,49 @@ class Metrics:
         return result
 
 
+class Hud:
+    """The graph overlay ("HUD"): small live line charts drawn over the game.
+    ITEMS: key -> (title, unit, fixed top of the scale or None = from the data)."""
+    ITEMS = {"fps": ("FPS", "", None), "ft": ("Frame time", "ms", None),
+             "g_temp": ("GPU temp", "°C", 100), "c_temp": ("CPU temp", "°C", 100),
+             "g_use": ("GPU usage", "%", 100), "c_use": ("CPU usage", "%", 100),
+             "r_use": ("RAM usage", "%", 100), "g_pow": ("GPU power", "W", None),
+             "c_pow": ("CPU power", "W", None)}
+    ORDER = ["fps", "ft", "g_temp", "c_temp", "g_use", "c_use", "r_use", "g_pow", "c_pow"]
+    MAX_ITEMS = 6
+    POS = ("tl", "tr", "bl", "br", "custom")
+    SIZES = ("s", "m", "l")
+    LAYOUTS = ("v", "h", "grid")
+    STYLES = ("hud", "clean")
+    WINDOWS = (0, 30, 60, 120, 300)         # seconds of history in each chart; 0 = real time
+    REALTIME_SECONDS = 10                   # real time: the last 10 s, read 4 times a second
+    REALTIME_PERIOD = 0.25
+    MOTIONS = ("smooth", "saver")           # smooth scrolling / one step a second
+    # key, name, accent, line colors (one per chart, in order)
+    THEMES = (("neon", "Neon", "#35d6ff", ["#35d6ff", "#ff4fd8", "#39ff88", "#ffe14d", "#9b7bff", "#ff8a3d"]),
+              ("toxic", "Toxic", "#7dff3a", ["#7dff3a", "#d4ff3a", "#3affb0", "#3ad7ff", "#fffb3a", "#a3ff8a"]),
+              ("crimson", "Crimson", "#ff3a4f", ["#ff3a4f", "#ff8a3d", "#ffd23a", "#ff5ca8", "#ff6f6f", "#ffb38a"]),
+              ("violet", "Violet", "#b06bff", ["#b06bff", "#ff6bd5", "#6b8cff", "#6bf0ff", "#e0a3ff", "#8a6bff"]),
+              ("ice", "Ice", "#8fd8ff", ["#8fd8ff", "#c8ecff", "#7fffe0", "#a8b8ff", "#e6f6ff", "#6fc0ff"]),
+              ("gold", "Gold", "#ffc83a", ["#ffc83a", "#ff9a3a", "#fff07a", "#ffdf9a", "#ffb35c", "#e8d27a"]),
+              ("mono", "Mono", "#ffffff", ["#ffffff", "#d0d0d8", "#a8a8b4", "#ffffff", "#d0d0d8", "#a8a8b4"]))
+
+    @classmethod
+    def theme(cls, key):
+        for k, name, accent, colors in cls.THEMES:
+            if k == key:
+                return accent, colors
+        return cls.THEMES[0][2], cls.THEMES[0][3]
+
+    @classmethod
+    def clean_items(cls, raw):
+        """Known keys only, no repeats, at most MAX_ITEMS, never empty."""
+        out = []
+        for k in raw if isinstance(raw, list) else []:
+            if k in cls.ITEMS and k not in out:
+                out.append(k)
+        return out[:cls.MAX_ITEMS] or ["fps", "g_temp"]
+
 
 # =============================================================== Thresholds
 class Thresholds:
@@ -354,8 +436,26 @@ class Settings:
                 "show_mode": "always", "hotkey_secs": 5, "language": "en",
                 "font": "Consolas", "weight": "bold", "label_weight": "bold",
                 "value_color": "white",
+                # graph overlay (HUD) - see class Hud
+                "hud_on": False, "hud_items": ["fps", "ft", "g_temp", "c_temp"],
+                "hud_pos": "tr", "hud_x": None, "hud_y": None, "hud_monitor": "primary",
+                "hud_size": "m", "hud_layout": "v", "hud_style": "hud",
+                "hud_theme": "neon", "hud_alpha": 65, "hud_window": 60,
+                "hud_mode": "always", "hud_motion": "smooth",
+                # anti-cheat safe mode: auto / always / off (see class SafeMode)
+                "safe_mode": "auto",
+                # window look
+                "ui_scale": 100, "ui_radius": "round", "ui_font": "Segoe UI", "ui_hue": 160,
                 "order": Metrics.default_order(),
                 "show": {k: True for k in Metrics.KEYS}}
+
+    # the second graph overlay: the same settings under "hud2_"
+    HUD_PREFIXES = ("hud_", "hud2_")
+    for _k in [k for k in DEFAULTS if k.startswith("hud_")]:
+        DEFAULTS["hud2_" + _k[4:]] = deepcopy(DEFAULTS[_k])
+    DEFAULTS.update(hud2_pos="tl", hud2_items=["g_use", "c_use", "r_use"], hud2_theme="toxic")
+    del _k
+    EXTRA_KEYS = ("safe_mode", "ui_scale", "ui_radius", "ui_font", "ui_hue")
 
     def __init__(self):
         Paths.migrate()
@@ -389,8 +489,14 @@ class Settings:
                       "driver_asked", "look", "bg", "monitor", "refresh",
                       "palette", "net_unit", "ui_theme", "ui_accent",
                       "sessions_on", "show_mode", "hotkey_secs", "font", "weight",
-                      "label_weight", "value_color", "language"):
+                      "label_weight", "value_color", "language", "hud_on", "hud_items",
+                      "hud_pos", "hud_x", "hud_y", "hud_monitor", "hud_size", "hud_layout",
+                      "hud_style", "hud_theme", "hud_alpha", "hud_window", "hud_mode",
+                      "hud_motion"):
                 if k in raw:
+                    cfg[k] = raw[k]
+            for k in self.DEFAULTS:
+                if (k.startswith("hud2_") or k in self.EXTRA_KEYS) and k in raw:
                     cfg[k] = raw[k]
             shows = raw.get("show", {})
             for k in Metrics.KEYS:
@@ -427,7 +533,7 @@ class Settings:
             cfg["net_unit"] = "bytes"
         if cfg["ui_theme"] not in [k for k, _, _, _ in Theme.UI_THEMES]:
             cfg["ui_theme"] = "default"
-        if cfg["ui_accent"] not in [k for k, _, _ in Theme.UI_ACCENTS]:
+        if cfg["ui_accent"] not in [k for k, _, _ in Theme.UI_ACCENTS]:  # includes "custom"
             cfg["ui_accent"] = "auto"
         if not isinstance(cfg["font"], str) or not cfg["font"].strip() \
                 or len(cfg["font"]) > 64 or any(ord(c) < 32 for c in cfg["font"]):
@@ -456,6 +562,38 @@ class Settings:
             cfg["show_mode"] = "always"
         if cfg["hotkey_secs"] not in (3, 5, 10):
             cfg["hotkey_secs"] = 5
+        # ---- graph overlays (1 and 2)
+        for P in cls.HUD_PREFIXES:
+            cfg[P + "on"] = bool(cfg[P + "on"])
+            cfg[P + "items"] = Hud.clean_items(cfg[P + "items"])
+            for key, allowed, default in ((P + "pos", Hud.POS, "tr"), (P + "size", Hud.SIZES, "m"),
+                                          (P + "layout", Hud.LAYOUTS, "v"),
+                                          (P + "style", Hud.STYLES, "hud"),
+                                          (P + "theme", [t[0] for t in Hud.THEMES], "neon"),
+                                          (P + "window", Hud.WINDOWS, 60),
+                                          (P + "mode", ("always", "hotkey"), "always"),
+                                          (P + "motion", Hud.MOTIONS, "smooth")):
+                if cfg[key] not in allowed or isinstance(cfg[key], bool):
+                    cfg[key] = default
+            cfg[P + "alpha"] = cls._num(cfg[P + "alpha"], 0, 100, 65, 5)
+            if not isinstance(cfg[P + "monitor"], str) or not cfg[P + "monitor"] \
+                    or len(cfg[P + "monitor"]) > 64:
+                cfg[P + "monitor"] = "primary"
+            for k in (P + "x", P + "y"):
+                if not isinstance(cfg[k], int) or isinstance(cfg[k], bool):
+                    cfg[P + "x"] = cfg[P + "y"] = None
+            if cfg[P + "pos"] == "custom" and cfg[P + "x"] is None:
+                cfg[P + "pos"] = "tr"
+        # ---- safe mode / window look
+        if cfg["safe_mode"] not in ("auto", "always", "off"):
+            cfg["safe_mode"] = "auto"
+        if cfg["ui_scale"] not in Theme.UI_SCALES or isinstance(cfg["ui_scale"], bool):
+            cfg["ui_scale"] = 100
+        if cfg["ui_radius"] not in [k for k, _ in Theme.UI_RADII]:
+            cfg["ui_radius"] = "round"
+        if cfg["ui_font"] not in Theme.UI_FONTS:
+            cfg["ui_font"] = "Segoe UI"
+        cfg["ui_hue"] = cls._num(cfg["ui_hue"], 0, 359, 160)
         return cfg
 
     def save(self):
@@ -522,11 +660,18 @@ class WinApi:
         u.SetWindowPos.argtypes = [
             wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int,
             ctypes.c_int, ctypes.c_int, wintypes.UINT]
+        u.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+        u.IsZoomed.argtypes = [wintypes.HWND]
+        u.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
         cls.shell32.ShellExecuteW.restype = ctypes.c_void_p
-        try:  # own taskbar identity: groups windows under the Lmonitor icon
-            cls.shell32.SetCurrentProcessExplicitAppUserModelID("Lmonitor.App")
-        except Exception:
-            pass
+        # From source the process is python.exe: give it its own taskbar identity. The built
+        # Lmonitor.exe keeps Windows' default identity (its exe), so the taskbar shows the
+        # exe's icon and a pinned Lmonitor keeps its icon and start command.
+        if not getattr(sys, "frozen", False):
+            try:
+                cls.shell32.SetCurrentProcessExplicitAppUserModelID("Lmonitor.App")
+            except Exception:
+                pass
 
     # ---- access level
     @classmethod
@@ -605,7 +750,81 @@ class WinApi:
                                             ctypes.byref(pid))
         return pid.value
 
+    SHELL_CLASSES = {"Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd"}
+
+    @classmethod
+    def fullscreen_app(cls, games_only=False):
+        """Is another program's window in front and covering its whole screen (a game,
+        a full-screen video)? Cheap: a few window-manager calls.
+        games_only: a maximized normal window (browser, editor) does not count."""
+        try:
+            u = cls.user32
+            h = u.GetForegroundWindow()
+            if not h or cls.foreground_pid() == os.getpid():
+                return False
+            name = ctypes.create_unicode_buffer(64)
+            u.GetClassNameW(h, name, 64)
+            if name.value in cls.SHELL_CLASSES:          # the desktop / taskbar
+                return False
+            if games_only and u.IsZoomed(h):
+                return False
+            r = wintypes.RECT()
+            if not u.GetWindowRect(h, ctypes.byref(r)):
+                return False
+
+            class MonitorInfo(ctypes.Structure):
+                _fields_ = [("cb", wintypes.DWORD), ("rc", wintypes.RECT),
+                            ("work", wintypes.RECT), ("flags", wintypes.DWORD)]
+            u.MonitorFromWindow.restype = wintypes.HANDLE
+            u.MonitorFromWindow.argtypes = [wintypes.HWND, wintypes.DWORD]
+            u.GetMonitorInfoW.argtypes = [wintypes.HANDLE, ctypes.c_void_p]
+            mon = u.MonitorFromWindow(h, 2)               # MONITOR_DEFAULTTONEAREST
+            mi = MonitorInfo()
+            mi.cb = ctypes.sizeof(mi)
+            if not mon or not u.GetMonitorInfoW(mon, ctypes.byref(mi)):
+                return False
+            m = mi.rc
+            return r.left <= m.left and r.top <= m.top and r.right >= m.right and r.bottom >= m.bottom
+        except Exception:
+            return False
+
+    _eco = None
+
+    @classmethod
+    def set_background_mode(cls, on):
+        """on: Lmonitor is not in front - run below normal priority and ask Windows for
+        "efficiency mode" (EcoQoS: slower cores / E-cores), so the game keeps the fast
+        cores. off: normal again. Only this process is changed; nothing is saved."""
+        on = bool(on)
+        if on == cls._eco:
+            return
+        cls._eco = on
+        try:
+            k = cls.kernel32
+            k.SetPriorityClass.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+            k.SetProcessInformation.argtypes = [wintypes.HANDLE, ctypes.c_int,
+                                                ctypes.c_void_p, wintypes.DWORD]
+            proc = wintypes.HANDLE(-1)                          # this process
+            k.SetPriorityClass(proc, 0x4000 if on else 0x20)   # BELOW_NORMAL / NORMAL
+
+            class Throttle(ctypes.Structure):
+                _fields_ = [("Version", wintypes.ULONG), ("ControlMask", wintypes.ULONG),
+                            ("StateMask", wintypes.ULONG)]
+            st = Throttle(1, 1, 1 if on else 0)                 # EXECUTION_SPEED
+            k.SetProcessInformation(proc, 4, ctypes.byref(st), ctypes.sizeof(st))
+        except Exception:
+            pass
+
     # --- by window handle (HWND): used by any UI (Tk, Qt)
+
+    @classmethod
+    def click_through_hwnd(cls, h, on):
+        """Mouse clicks pass through this window (on) or reach it (off)."""
+        u = cls.user32
+        ex = u.GetWindowLongW(h, -20)                 # GWL_EXSTYLE
+        new = (ex | 0x20) if on else (ex & ~0x20)     # WS_EX_TRANSPARENT
+        if new != ex:
+            u.SetWindowLongW(h, -20, new)
 
     @classmethod
     def keep_on_top_hwnd(cls, h):
@@ -802,6 +1021,34 @@ class LibreHardwareHost:
             hw, ("GPU Memory Total", "D3D Dedicated Memory Total"))
         self.gpu["mem_free"] = self.named(hw, ("GPU Memory Free",))
 
+    suspended = False
+
+    @hw_locked
+    def suspend(self):
+        """Close the sensor library (and with it the PawnIO driver handle). CPU temperature,
+        power and clock then read as "not available" until resume()."""
+        if self.suspended:
+            return
+        self.suspended = True
+        c, self.computer = self.computer, None
+        self.cpu_hw = self.cpu_temp = self.cpu_power = self.gpu_hw = None
+        self.cpu_clocks, self.gpu, self.extra_hw, self._extras_on = [], {}, [], False
+        try:
+            if c is not None:
+                c.Close()
+        except Exception:
+            Logger.error("sensor library close")
+
+    @hw_locked
+    def resume(self):
+        if not self.suspended:
+            return
+        self.suspended = False
+        try:
+            self._open()
+        except Exception:
+            Logger.error("sensor library reopen")
+
     @hw_locked
     def enable_extras(self):
         """Load motherboard / drive / battery sensors (first time only).
@@ -809,7 +1056,7 @@ class LibreHardwareHost:
         Done on demand, so start-up stays as fast as before and nothing
         extra runs unless the Hardware page asks for it.
         """
-        if self._extras_on or self.computer is None:
+        if self._extras_on or self.computer is None or self.suspended:
             return
         self._extras_on = True
         c = self.computer
@@ -979,11 +1226,11 @@ class GpuReader:
         return Theme.NVIDIA_GREEN
 
     @hw_locked
-    def read(self, want):
+    def read(self, want, nvml_only=False):
         """(usage %, temp C, power W, clock MHz, (used GB, total GB)).
 
-        `want` is the {key: visible} dict; None means unknown.
-        """
+        `want` is the {key: visible} dict; None means unknown. nvml_only: never fall back
+        to the (slower) sensor library - for fast repeated reads."""
         use = temp = pw = clk = mem = None
         if self.available:  # NVIDIA: NVML first
             nv = pynvml
@@ -1008,7 +1255,7 @@ class GpuReader:
                 if m is not None and m.total:
                     mem = (m.used / 1024**3, m.total / 1024**3)
         h = self.host
-        if h.gpu_hw is not None:  # AMD / Intel, or what NVML could not read
+        if h.gpu_hw is not None and not (nvml_only and self.available):  # AMD / Intel, or NVML gaps
             gaps = ((want["g_use"] and use is None)
                     or (want["g_temp"] and temp is None)
                     or (want["g_pow"] and pw is None)
@@ -1047,10 +1294,132 @@ class MemoryReader:
         return psutil.swap_memory()
 
 
+# =============================================================== Start with Windows
+class Autostart:
+    """Start Lmonitor when the user signs in to Windows.
+
+    Lmonitor needs administrator rights, and Windows does not start such programs from
+    the usual "Run" list. So this makes a task in Windows' own Task Scheduler ("at log
+    on", highest rights, also on battery). Nothing else is changed; switching the option
+    off deletes the task. Lmonitor then starts hidden in the tray (--startup)."""
+    TASK = "Lmonitor"
+
+    @staticmethod
+    def command():
+        """(program, arguments) that starts this Lmonitor."""
+        if getattr(sys, "frozen", False):
+            return sys.executable, "--startup"
+        return sys.executable, '-m lmonitor.qt --startup'
+
+    @classmethod
+    def xml(cls, user=None, exe=None, args=None, cwd=None):
+        from xml.sax.saxutils import escape
+        e, a = cls.command()
+        exe, args = exe or e, a if args is None else args
+        cwd = cwd or (os.path.dirname(exe) if getattr(sys, "frozen", False) else Paths.HERE)
+        user = user or (os.environ.get("USERDOMAIN", "") + "\\" + os.environ.get("USERNAME", "")).strip("\\")
+        return f"""<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo><Description>Starts Lmonitor when you sign in (made by Lmonitor's "Start with Windows" option).</Description></RegistrationInfo>
+  <Triggers><LogonTrigger><Enabled>true</Enabled><UserId>{escape(user)}</UserId><Delay>PT8S</Delay></LogonTrigger></Triggers>
+  <Principals><Principal id="Author"><UserId>{escape(user)}</UserId><LogonType>InteractiveToken</LogonType><RunLevel>HighestAvailable</RunLevel></Principal></Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+  </Settings>
+  <Actions Context="Author"><Exec><Command>{escape(exe)}</Command><Arguments>{escape(args)}</Arguments><WorkingDirectory>{escape(cwd)}</WorkingDirectory></Exec></Actions>
+</Task>
+"""
+
+    @staticmethod
+    def _schtasks(*args):
+        r = subprocess.run(["schtasks"] + list(args), capture_output=True, text=True,
+                           errors="replace", creationflags=0x08000000, timeout=20)
+        return r.returncode, (r.stdout + r.stderr).strip()
+
+    @classmethod
+    def is_on(cls):
+        try:
+            return cls._schtasks("/Query", "/TN", cls.TASK)[0] == 0
+        except Exception:
+            return False
+
+    @classmethod
+    def set(cls, on):
+        """-> "" when done, else a short reason."""
+        try:
+            if not on:
+                if not cls.is_on():
+                    return ""
+                code, out = cls._schtasks("/Delete", "/TN", cls.TASK, "/F")
+                return "" if code == 0 else (out or "Windows refused")[-200:]
+            import tempfile
+            path = os.path.join(tempfile.gettempdir(), "lmonitor_task.xml")
+            with open(path, "w", encoding="utf-16") as f:
+                f.write(cls.xml())
+            try:
+                code, out = cls._schtasks("/Create", "/TN", cls.TASK, "/XML", path, "/F")
+            finally:
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+            if code == 0:
+                return ""
+            if not WinApi.is_admin():
+                return "Needs administrator rights (start Lmonitor normally, then try again)"
+            return (out or "Windows refused")[-200:]
+        except Exception as e:
+            Logger.error("autostart")
+            return str(e)[:200] or type(e).__name__
+
+
+# =============================================================== Anti-cheat safe mode
+class SafeMode:
+    """Games with kernel anti-cheat (Call of Duty / Warzone, Valorant, Fortnite...) look at
+    what else runs on the PC. Lmonitor never touches a game (no injection, no reading of
+    game memory), but its CPU sensors go through a kernel driver (PawnIO), and anti-cheat
+    systems are known to dislike hardware-access drivers. While such a game runs, safe mode
+    closes the sensor library - so the driver is not used at all - and stops looking at
+    other programs. Nothing is hidden or disguised: Lmonitor just does less."""
+    GAMES = {"cod.exe", "codhq.exe", "modernwarfare.exe", "blackopscoldwar.exe", "vanguard.exe",
+             "valorant.exe", "valorant-win64-shipping.exe", "fortniteclient-win64-shipping.exe",
+             "r5apex.exe", "r5apex_dx12.exe", "tslgame.exe", "rainbowsix.exe",
+             "rainbowsix_vulkan.exe", "escapefromtarkov.exe", "destiny2.exe", "bf2042.exe",
+             "bf6.exe", "thefinals.exe", "discovery.exe", "rustclient.exe", "dayz_x64.exe",
+             "deltaforceclient-win64-shipping.exe", "marvel-win64-shipping.exe", "cs2.exe"}
+    HELPERS = {"easyanticheat.exe", "easyanticheat_eos.exe", "beservice.exe", "beservice_x64.exe",
+               "faceit.exe", "esportalclient.exe"}
+
+    @classmethod
+    def is_protected(cls, name):
+        n = (name or "").lower()
+        return n in cls.GAMES or n in cls.HELPERS or n.endswith("-cod.exe")
+
+    @classmethod
+    def running(cls):
+        """Name of a protected game / anti-cheat program that runs now, or ""."""
+        try:
+            for p in psutil.process_iter(["name"]):
+                if cls.is_protected(p.info.get("name")):
+                    return p.info["name"]
+        except Exception:
+            Logger.error("safe mode scan")
+        return ""
+
+
 # =============================================================== FPS (PresentMon)
 class FpsMonitor:
     IGNORE = {"dwm.exe", "explorer.exe", "lmonitor.exe", "systemmonitor.exe", "python.exe",
               "pythonw.exe", "presentmon.exe"}
+    # drawn often but never a game (also ignored by game sessions)
+    NOT_GAMES = {"chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "opera.exe",
+                 "msedgewebview2.exe", "searchhost.exe", "startmenuexperiencehost.exe",
+                 "shellexperiencehost.exe", "textinputhost.exe", "applicationframehost.exe"}
 
     class ProcData:
         __slots__ = ("recent", "graph", "total_ms", "count", "last", "low",
@@ -1086,9 +1455,15 @@ class FpsMonitor:
             self.status = "PresentMon.exe not found"
             return
         try:
+            # Only frame times are read: GPU-work and input tracking are switched off
+            # (fewer Windows trace events while a game runs), and programs that are
+            # never games are left out (fewer lines for Lmonitor to read).
+            skip = []
+            for name in sorted(self.IGNORE | self.NOT_GAMES):
+                skip += ["--exclude", name]
             self.proc = subprocess.Popen(
                 [Paths.PRESENTMON, "--output_stdout", "--no_console_stats",
-                 "--stop_existing_session"],
+                 "--stop_existing_session", "--no_track_gpu", "--no_track_input"] + skip,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 stdin=subprocess.DEVNULL, text=True, encoding="utf-8",
                 errors="replace", bufsize=1,
@@ -1176,6 +1551,28 @@ class FpsMonitor:
         with self.lock:
             p = self.procs.get(pid)
             return p is not None and time.time() - p.last <= within
+
+    def recent_stats(self, since, fps_window=1.0):
+        """Program in front: (FPS over the last `fps_window` s, worst frame time in ms since
+        `since`), or None when it draws no frames. Cheap: reads the kept frame list."""
+        now = time.time()
+        pid = WinApi.foreground_pid()
+        with self.lock:
+            p = self.procs.get(pid)
+            if p is None or now - p.last > 2:
+                return None
+            cnt, total, worst = 0, 0.0, None
+            for t, ms in reversed(p.recent):
+                if t < since and now - t > fps_window:
+                    break
+                if now - t <= fps_window:
+                    cnt += 1
+                    total += ms
+                if t >= since and (worst is None or ms > worst):
+                    worst = ms
+        if cnt == 0:
+            return None
+        return 1000.0 * cnt / total, worst
 
     def counters(self, pid):
         """-> (frames, total ms, histogram copy) since PresentMon first saw it."""
@@ -1300,7 +1697,7 @@ class Diagnostics:
 class AppInfo:
     """Name / version shown in the Hardware > System tab."""
     NAME = "Lmonitor"
-    VERSION = "1.17.0"
+    VERSION = "1.17.6"
     PUBLISHER = ""      # put your name or company here (empty = "Not set")
     URL = "https://github.com/unrealhamed/Lmonitor"
 
@@ -2078,6 +2475,7 @@ class SessionRecorder:
     Sessions shorter than a minute are dropped. step() does one cycle and
     runs in a worker thread, so the window never waits for it."""
     STEP = 2.0
+    safe = False            # anti-cheat safe mode: do not look at other programs
     START_AFTER = 6         # s of steady frames before a session starts
     END_AFTER = 20          # s without frames = the game ended
     MIN_SECONDS = 60
@@ -2188,7 +2586,7 @@ class SessionRecorder:
         for k in self.KEYS:
             c[k].append(row[k])
         cur["n"] += 1
-        if cur["n"] % self.SCAN_EVERY == 1:
+        if cur["n"] % self.SCAN_EVERY == 1 and not self.safe:
             self._scan_apps(cur)
         if cur["n"] % self.CHECKPOINT == 0 and now - cur["start"] >= self.MIN_SECONDS:
             self._save(cur, now, live=True)   # visible in the list while playing
@@ -3924,7 +4322,7 @@ class ReportBuilder:
         if not issues:
             return {"value": None, "covered": 0, "total": len(cls.AREAS),
                     "deductions": [], "unknown": [],
-                    "text": "No scan yet - run a Diagnostics scan first."}
+                    "text": "No scan yet - press Scan PC first."}
         answered = {i["area"] for i in issues if i["sev"] != "unknown"}
         covered = len([a for a in cls.AREAS if a in answered])
         unknown = [{"area": i["area"], "title": i["title"]}

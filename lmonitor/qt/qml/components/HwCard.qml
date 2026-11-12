@@ -1,5 +1,6 @@
 import QtQuick
 import Lmonitor
+import "."                      // components/Text.qml: upright text in Persian
 
 // Hardware card in the reference style: title, model, status, usage bar.
 // ring = true adds the temperature ring (CPU / GPU). Missing values show "--".
@@ -17,14 +18,14 @@ Card {
     Text { x: 18; y: 16; text: root.title; color: Tokens.text
            font.family: Tokens.font; font.pixelSize: 18; font.bold: true }
     Text { x: 18; y: 40; width: parent.width - (root.ring ? 130 : 36); elide: Text.ElideRight
-           text: root.model; color: Tokens.dim
+           text: Tr.line(root.model); color: Tokens.dim
            font.family: Tokens.font; font.pixelSize: Tokens.fsSmall }
     Row { x: 18; y: 62; spacing: 7
           Dot { anchors.verticalCenter: parent.verticalCenter; status: root.status }
           Text { text: Tokens.statusText(root.status); color: Tokens.text
                  font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: true } }
     Text { x: 18; y: 84; width: parent.width - (root.ring ? 130 : 36); elide: Text.ElideRight
-           text: root.detail; color: Tokens.sub
+           text: Tr.t(root.detail); color: Tokens.sub
            font.family: Tokens.font; font.pixelSize: Tokens.fsSmall }
     Text { visible: text !== ""; x: 18; y: 102; width: parent.width - 36; elide: Text.ElideRight
            text: root.info && root.info.note ? Tr.t(root.info.note) : ""

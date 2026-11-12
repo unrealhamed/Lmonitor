@@ -10,8 +10,28 @@ Window {
     id: w
     visible: false
     color: "transparent"
-    width: bar.implicitWidth
-    height: bar.implicitHeight
+    // The window only grows while the numbers change (99 -> 100 fps, 9 -> 10 W...).
+    // Resizing an always-on-top window over a game every half second costs the game
+    // frames, so it shrinks only when the settings change.
+    property real keepW: 1
+    property real keepH: 1
+    width: keepW
+    height: keepH
+    function grow() {
+        if (bar.implicitWidth > keepW) keepW = bar.implicitWidth
+        if (bar.implicitHeight > keepH) keepH = bar.implicitHeight
+    }
+    function fit() { keepW = Math.max(1, bar.implicitWidth); keepH = Math.max(1, bar.implicitHeight) }
+    Connections {
+        target: bar
+        function onImplicitWidthChanged() { w.grow() }
+        function onImplicitHeightChanged() { w.grow() }
+    }
+    Connections {
+        target: backend
+        function onSettingsChanged() { w.fit() }
+    }
+    Component.onCompleted: fit()
     title: Tr.t("Lmonitor overlay")
 
     OverlayBar {

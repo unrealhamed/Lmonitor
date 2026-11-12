@@ -6,11 +6,19 @@ from collections import deque
 
 class GraphHistory:
     KEEP = 600.0
-    KEYS = ("c_temp", "g_temp", "c_use", "g_use", "r_use", "net_down", "net_up")
+    KEYS = ("c_temp", "g_temp", "c_use", "g_use", "r_use", "net_down", "net_up", "g_pow", "c_pow")
     MAX_GAP = 4.5                                # s; a longer hole is real and stays visible
 
-    def __init__(self):
+    def __init__(self, keys=None, keep=None):
+        if keys is not None:                     # another set of values (the graph overlay)
+            self.KEYS = tuple(keys)
+        if keep is not None:
+            self.KEEP = float(keep)
         self.data = deque()                      # (time, {key: value}, {fan name: rpm})
+
+    def raw(self, since):
+        """Readings newer than `since` (an atomic copy): [(time, {key: value})]."""
+        return [(t, v) for t, v, _ in list(self.data) if t >= since]
 
     def add(self, snap, fans=None, now=None):
         now = float(now)

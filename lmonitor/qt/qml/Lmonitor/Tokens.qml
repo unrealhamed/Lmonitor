@@ -15,6 +15,7 @@ QtObject {
     property color dim: "#64646e"
     // accents (neon)
     readonly property color cyan: "#62c8ff"
+    readonly property color track: light ? Qt.darker(card, 1.12) : Qt.lighter(card, 1.9)   // empty part of a bar
     readonly property color blue: "#62c8ff"
     readonly property color violet: "#b48cff"
     readonly property color green: "#1fd18b"
@@ -32,9 +33,9 @@ QtObject {
     readonly property color ram: green
     readonly property color disk: orange
     // shape / type
-    readonly property int radius: 16
+    property int radius: 16
     readonly property int gap: 14
-    readonly property string font: "Segoe UI"
+    property string font: "Segoe UI"
     readonly property int fsTitle: 26
     readonly property int fsHead: 15
     readonly property int fsBig: 34

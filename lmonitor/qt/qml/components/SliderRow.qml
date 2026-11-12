@@ -1,5 +1,6 @@
 import QtQuick
 import Lmonitor
+import "."                      // components/Text.qml: upright text in Persian
 
 // Label + value + slider, all custom (no style dependency).
 Item {
@@ -21,7 +22,7 @@ Item {
         y: 28; width: parent.width; height: 6; radius: 3; color: Tokens.fg(0.12)
         Rectangle { width: knob.x + knob.width / 2; height: parent.height; radius: 3; color: Tokens.accent }
         Rectangle {
-            id: knob; width: 18; height: 18; radius: 9; y: -6; color: "white"
+            id: knob; width: 18; height: 18; radius: 9; y: -6; color: "white"; border.width: 1; border.color: Tokens.dim
             x: (root.value - root.from) / (root.to - root.from) * (track.width - width)
         }
         MouseArea {

@@ -120,7 +120,7 @@ Item {
                 Text { x: 20; y: 14; text: Tr.t(modelData.title); color: Tokens.sub
                        font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: true }
                 Text { anchors.right: parent.right; anchors.rightMargin: 20; y: 14; color: Tokens.dim
-                       text: tileMouse.containsMouse ? Tr.t("Click to enlarge") : Tr.t("last ") + page.names[page.range]
+                       text: tileMouse.containsMouse ? Tr.t("Click to enlarge") : Tr.line(Tr.t("last ") + page.names[page.range])
                        font.family: Tokens.font; font.pixelSize: Tokens.fsSmall }
                 Text { x: 20; y: 34; color: Tokens.text; font.family: Tokens.font; font.pixelSize: 28; font.bold: true
                        text: page.valueText(modelData) }

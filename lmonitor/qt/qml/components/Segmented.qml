@@ -1,5 +1,6 @@
 import QtQuick
 import Lmonitor
+import "."                      // components/Text.qml: upright text in Persian
 
 // Pill selector. model: list of strings; `index` is the selected one (-1 = none).
 Rectangle {

@@ -1,5 +1,6 @@
 import QtQuick
 import Lmonitor
+import "."                      // components/Text.qml: upright text in Persian
 
 // One hardware card. `info` comes from backend.dashboard.cards.<name>.
 // Missing values show "--" and "No data" - never a guess.

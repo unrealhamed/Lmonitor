@@ -6,6 +6,8 @@ The engine classes do the work in their own worker threads and expose
 tool page is open and hands finished plain dictionaries to QML. Nothing is
 polled while no tool page is open.
 """
+import time
+
 from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
 from lmonitor.engine import Logger, WinApi
@@ -86,7 +88,8 @@ class Tools(QObject):
             s = b.storage
             return (s.busy, s.progress, s.version, id(s.last))
         if name == "reports":
-            return (b.reports.busy, b.reports.version, id(b.reports.last))
+            return (b.reports.busy, b.reports.version, id(b.reports.last),
+                    b.scanner.running, b.scanner.progress, b.scanner.version)
         return (b.sessions.version, b.sessions.status()[0], b.settings["sessions_on"], self._sess_gen)
 
     _sess_gen = 0
@@ -102,6 +105,9 @@ class Tools(QObject):
             self._sig[name] = sig
             self._state[name] = getattr(self._b, "tools_" + name if name != "opt" else "tools_opt")()
             getattr(self, name + "Changed").emit()
+            if name == "reports":                   # the PC check page also lists the scan's findings
+                self._state["diag"] = self._b.tools_diag()
+                self.diagChanged.emit()
         except Exception:
             Logger.error("qt tools poll " + name)
 
@@ -203,7 +209,22 @@ class Tools(QObject):
         self._b.storage.last = None
         self._bump("storage")
 
-    # ---- Reports
+    # ---- Reports / PC check
+    @Slot()
+    def repScan(self):
+        """Scan the PC (reads only), then build the report from it."""
+        b = self._b
+
+        def work():
+            b.scanner.start()
+            t0 = time.time()
+            time.sleep(0.3)
+            while b.scanner.running and time.time() - t0 < 180:
+                time.sleep(0.3)
+            b.reports.build()
+        b.reports.run(work)
+        self._bump("reports")
+
     @Slot()
     def repBuild(self):
         r = self._b.reports

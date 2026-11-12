@@ -10,7 +10,7 @@ def chk(name, cond):
     if cond: ok += 1; print("PASS", name)
     else: bad += 1; print("FAIL", name)
 # 1) the engine never imports a UI toolkit
-src = open(_os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "lmonitor", "engine.py")).read() + open(_os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "lmonitor", "backend.py")).read()
+src = open(_os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "lmonitor", "engine.py"), encoding="utf-8").read() + open(_os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "lmonitor", "backend.py"), encoding="utf-8").read()
 import re
 chk("engine/backend import no tkinter, PIL, pystray or Qt at module level",
     not re.search(r"^(import|from)\s+(tkinter|PIL|pystray|PySide6|PyQt)", src, re.M))

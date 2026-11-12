@@ -87,7 +87,7 @@ Item {
                     Column {
                         Text { text: modelData.t || ""; color: Tokens.text
                                font.family: Tokens.font; font.pixelSize: 15; font.bold: true }
-                        Text { text: modelData.sub || ""; color: Tokens.dim
+                        Text { text: Tr.t(modelData.sub || ""); color: Tokens.dim
                                font.family: Tokens.font; font.pixelSize: Tokens.fsSmall }
                     }
                 }

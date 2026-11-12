@@ -1,5 +1,6 @@
 import QtQuick
 import Lmonitor
+import "."                      // components/Text.qml: upright text in Persian
 
 // Temperature ring. value: 0..100 (°C) or null = no sensor (empty ring, "--").
 Item {
@@ -9,6 +10,7 @@ Item {
     property string unitText: Tr.t("Celsius")
     onValueChanged: cv.requestPaint()
     onColorChanged: cv.requestPaint()
+    Connections { target: Tokens; function onTrackChanged() { cv.requestPaint() } }
     Canvas {
         id: cv
         anchors.fill: parent
@@ -18,7 +20,7 @@ Item {
             var r = Math.min(width, height) / 2 - 6, cx = width / 2, cy = height / 2
             var a0 = 0.75 * Math.PI, sweep = 1.5 * Math.PI
             ctx.lineWidth = 8; ctx.lineCap = "round"
-            ctx.strokeStyle = "#26262c"
+            ctx.strokeStyle = Tokens.track
             ctx.beginPath(); ctx.arc(cx, cy, r, a0, a0 + sweep); ctx.stroke()
             if (root.value !== null && root.value !== undefined) {
                 var f = Math.max(0.02, Math.min(1, root.value / 100))

@@ -1,5 +1,6 @@
 import QtQuick
 import Lmonitor
+import "."                      // components/Text.qml: upright text in Persian
 
 // One titled section of label/value rows (Hardware, session details).
 // rows: [{kind: "row"|"bar", a, b, c}]. A row with no value is a full-width
@@ -20,7 +21,7 @@ Card {
             Item {
                 width: body.width
                 height: Math.max(val.implicitHeight, 20) + 12
-                Rectangle { visible: index > 0; width: parent.width; height: 1; color: "#1e1e23" }
+                Rectangle { visible: index > 0; width: parent.width; height: 1; color: Tokens.line }
                 Text { visible: modelData.b === ""; x: 0; y: 8; width: parent.width; wrapMode: Text.Wrap
                        text: Tr.t(modelData.a); color: Tokens.sub
                        font.family: Tokens.font; font.pixelSize: Tokens.fsBody }
@@ -33,7 +34,7 @@ Card {
                        color: modelData.kind === "row" && typeof modelData.c === "string" && modelData.c.charAt(0) === "#" ? modelData.c : Tokens.text
                        font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: true }
                 Rectangle { visible: modelData.kind === "bar" && modelData.c !== null
-                            x: 0; y: parent.height - 5; width: parent.width; height: 3; radius: 2; color: "#2a2a31"
+                            x: 0; y: parent.height - 5; width: parent.width; height: 3; radius: 2; color: Tokens.track
                     Rectangle { height: parent.height; radius: 2; color: Tokens.accent
                                 width: parent.width * Math.max(0, Math.min(1, Number(modelData.c) || 0)) } }
             }
