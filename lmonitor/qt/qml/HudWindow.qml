@@ -19,6 +19,7 @@ Window {
 
     GraphHud {
         id: hudView
+        animate: w.visible              // hidden (off / F10): its scroll clock stops
         info: backend.huds[w.slot] || ({items: [], accent: "#35d6ff"})
         style: backend.hudStyles[w.slot] || ({})
     }

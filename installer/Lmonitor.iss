@@ -75,11 +75,25 @@ begin
   Result := RegKeyExists(HKLM, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO');
 end;
 
+{ MSI Afterburner's overlay (RivaTuner Statistics Server) hooks every DirectX program,
+  Lmonitor too. RivaTuner's own "do not hook" profile for Lmonitor.exe keeps the two apart
+  (the same kind of profile RivaTuner ships for HWiNFO and Discord). }
+function RtssDir(): String;
+begin
+  Result := '';
+  if not RegQueryStringValue(HKLM32, 'SOFTWARE\Unwinder\RTSS', 'InstallDir', Result) then
+    RegQueryStringValue(HKLM64, 'SOFTWARE\Unwinder\RTSS', 'InstallDir', Result);
+  if (Result <> '') and not DirExists(Result + '\Profiles') then
+    Result := '';
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   Code: Integer;
   Ran: Boolean;
 begin
+  if (CurStep = ssPostInstall) and (RtssDir() <> '') and not FileExists(RtssDir() + '\Profiles\{#AppExe}.cfg') then
+    SaveStringToFile(RtssDir() + '\Profiles\{#AppExe}.cfg', '[Hooking]' + #13#10 + 'EnableHooking' + #9#9 + '= 0' + #13#10, False);
   if (CurStep = ssPostInstall) and WizardIsTaskSelected('pawnio') then
   begin
     WizardForm.StatusLabel.Caption := 'Installing the PawnIO driver...';
@@ -104,6 +118,8 @@ var
 begin
   if CurUninstallStep = usPostUninstall then
   begin
+    if RtssDir() <> '' then                       { the RivaTuner profile made at install }
+      DeleteFile(RtssDir() + '\Profiles\{#AppExe}.cfg');
     Dir := ExpandConstant('{userappdata}\Lmonitor');
     { default = keep. A silent uninstall never deletes settings. }
     if (not UninstallSilent) and DirExists(Dir) then

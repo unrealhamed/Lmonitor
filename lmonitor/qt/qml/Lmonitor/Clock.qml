@@ -8,8 +8,10 @@ QtObject {
     id: clk
     property real now: Date.now()
     property bool active: true
+    // At most ~70 steps a second: on a 120 / 144 / 165 Hz screen every frame was redrawn,
+    // which looks the same as every other frame but costs twice the work.
     property FrameAnimation ticker: FrameAnimation {
         running: clk.active
-        onTriggered: clk.now = Date.now()
+        onTriggered: { var t = Date.now(); if (t - clk.now >= 14) clk.now = t }
     }
 }

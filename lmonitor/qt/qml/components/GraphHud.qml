@@ -40,7 +40,7 @@ Item {
     // window is redrawn only when it has moved about 1/3 pixel (16..100 ms) - not at the
     // screen's full refresh rate. Measured: same smoothness, far less work during a game.
     readonly property real pxPerMs: points > 1 ? (tileW / (points - 1)) / slotMs : 0
-    readonly property int tickMs: pxPerMs > 0 ? Math.max(16, Math.min(100, Math.round(0.33 / pxPerMs))) : 100
+    readonly property int tickMs: pxPerMs > 0 ? Math.max(16, Math.min(100, Math.round(0.5 / pxPerMs))) : 100
     Timer {
         interval: hud.tickMs; repeat: true
         running: hud.smooth && hud.visible

@@ -42,6 +42,7 @@ class Bridge(QObject):
     updateFound = Signal(str)          # a new version was just found (tray message)
     autostartChanged = Signal()
     _update_done = Signal(dict)
+    _autostart_done = Signal(bool, str)
 
     HUD_EMPTY = {"items": [], "accent": "#35d6ff", "window": 60}
     FALLBACK_FONTS = ("Consolas", "Cascadia Mono", "Courier New")
@@ -59,7 +60,7 @@ class Bridge(QObject):
         self._covered = False            # a full-screen program (game) is in front
         self._active = True              # a Lmonitor window has the focus
         self._qml_errors = []
-        self._set_cache = self._prev_cache = self._fonts = None
+        self._set_cache = self._prev_cache = self._fonts = self._ui_cache = None
         self._last_texts = {}
         self.host = None                         # OverlayHost (set by app.py)
         self.hud_hosts = []                      # HudHost x2: the graph overlays (set by app.py)
@@ -74,6 +75,7 @@ class Bridge(QObject):
         self._update_done.connect(self._on_update)
         self._covered_seen.connect(self._on_covered)
         self._hud_sampled.connect(self._on_hud)
+        self._autostart_done.connect(self._on_autostart)
         self._upd = {"state": "idle", "text": ""}
         self._info = None
         self._threads = [
@@ -88,6 +90,7 @@ class Bridge(QObject):
     def start(self):
         for t in self._threads:
             t.start()
+        self._autostart_job(None)
         self.checkUpdate()
         # ...and again every 3 hours while Lmonitor runs, so a release that comes out
         # later is noticed without pressing "Check for updates"
@@ -115,19 +118,34 @@ class Bridge(QObject):
 
     @Property(bool, notify=autostartChanged)
     def autostart(self):
-        if self._autostart is None:
-            self._autostart = Autostart.is_on()
-        return self._autostart
+        return bool(self._autostart)
 
     @Property(str, notify=autostartChanged)
     def autostartError(self):
         return self._autostart_err
 
+    def _autostart_job(self, on):
+        """Ask (on = None) or switch the Windows task on a worker thread."""
+        def work():
+            err = ""
+            try:
+                if on is not None:
+                    err = Autostart.set(bool(on))
+                state = Autostart.is_on()
+            except Exception as e:
+                state, err = bool(self._autostart), str(e)[:200]
+            self._autostart_done.emit(state, err)
+        threading.Thread(target=work, name="autostart", daemon=True).start()
+
+    def _on_autostart(self, state, err):
+        self._autostart, self._autostart_err = state, err
+        self.autostartChanged.emit()
+
     @Slot(bool)
     def setAutostart(self, on):
-        self._autostart_err = Autostart.set(bool(on))
-        self._autostart = Autostart.is_on()
+        self._autostart = bool(on)                    # the switch moves at once
         self.autostartChanged.emit()
+        self._autostart_job(bool(on))
 
     def _on_update(self, d):
         self._upd = d
@@ -180,13 +198,11 @@ class Bridge(QObject):
     HIDDEN_PERIOD = 3.5        # s between samples while nobody looks (stays under the gap limit)
 
     def _game_check(self):
-        """Is a full-screen program (a game) in front? Then the window is not drawn at
-        all, and while Lmonitor is not in front it runs in background mode."""
+        """Is a full-screen program (a game) in front? Then the window is not drawn at all."""
         covered = WinApi.fullscreen_app()
         if covered != self._covered:
             self._covered = covered            # read by this thread right away
             self._covered_seen.emit(covered)   # the QML side on the UI thread
-        WinApi.set_background_mode(not self._active)
         return covered
 
     def _loop(self):
@@ -201,7 +217,9 @@ class Bridge(QObject):
                     self._sampled.emit(self._b.dashboard(self._range))
             except Exception:
                 Logger.error("qt sampler")
-            busy = shown or (self.host is not None and self.host.wanted()) or self._hud_wanted()
+            # behind a full-screen game the window is not drawn, but the readings go on
+            # at their normal pace, so the charts have no holes when you come back
+            busy = self._ui_visible or (self.host is not None and self.host.wanted()) or self._hud_wanted()
             period = self._b.telemetry.interval if busy else self.HIDDEN_PERIOD
             # the time spent reading counts, so the readings stay evenly spaced
             self._wake.wait(max(0.05, period - (time.monotonic() - started)))
@@ -260,7 +278,6 @@ class Bridge(QObject):
     def setAppActive(self, active):
         """Called by app.py when a Lmonitor window gains / loses the focus."""
         self._active = bool(active)
-        WinApi.set_background_mode(not self._active)
         if active:
             self._wake.set()
 
@@ -495,7 +512,9 @@ class Bridge(QObject):
 
     @Property("QVariantMap", notify=settingsChanged)
     def ui(self):
-        return self._b.ui_style()
+        if self._ui_cache is None:                   # built once per change
+            self._ui_cache = self._b.ui_style()
+        return self._ui_cache
 
     @Property("QVariantList", constant=True)
     def uiThemes(self):
@@ -547,7 +566,7 @@ class Bridge(QObject):
         return self.host.screen_names() if self.host else []
 
     def settingsTouched(self):
-        self._set_cache = self._prev_cache = None
+        self._set_cache = self._prev_cache = self._ui_cache = None
         self.settingsChanged.emit()
         self._save.start()
         if self.host:

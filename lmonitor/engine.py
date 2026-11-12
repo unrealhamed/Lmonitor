@@ -77,9 +77,6 @@ class Theme:
     OVERLAY_FONT = "Consolas"
     MARGIN = 20             # gap to the screen edge (left / right)
     GRAPH_POINTS = 300      # frames shown in the frametime graph
-    GRAPH_W, GRAPH_H = 160, 22
-    GRAPH_TOP_MS = 50.0     # top of the graph in milliseconds
-    GRAPH_SS = 3            # smoothing quality of the graph
 
     # ---- overlay backgrounds: (key, menu name, color); None = from the accent
     OVERLAY_BGS = (("black", "Black", "#101010"),
@@ -115,23 +112,10 @@ class Theme:
     NET_COLOR = "#5ac8fa"
 
     # ---- main window (colors that do not depend on the GPU vendor)
-    SIDE_W = 200
-    WIN_W, WIN_H = 1000, 600
-    PANEL_X, PANEL_W = 752, 232          # quick settings, right side
-    PAGE_X, PAGE_W = 224, 512           # content area of every page
     C_BG, C_SIDE = "#17171b", "#111114"
     C_CARD, C_TRACK = "#212126", "#34343c"
     SUB, TXT, DIM = "#9a9aa8", "#f2f2f5", "#7c7c88"
     C_OK = "#3ddc84"                    # "everything fine" dot
-    F_LABEL = ("Segoe UI", 10, "bold")
-    F_SEG = ("Segoe UI", 11, "bold")
-    F_HEAD = ("Segoe UI Semibold", 12)
-    F_TITLE = ("Segoe UI Semibold", 20)
-    F_BRAND = ("Segoe UI Semibold", 15)
-    F_NAV = ("Segoe UI Semibold", 11)
-    F_BIG = ("Segoe UI Semibold", 26)
-    F_SMALL = ("Segoe UI", 10)
-    F_SMALL_B = ("Segoe UI Semibold", 10)
 
     # ---- accent colors by GPU vendor (applied once at start-up)
     NVIDIA = {"accent": "#76b900", "hi": "#8fd400", "on": "#0d1200"}
@@ -636,8 +620,6 @@ class Profiles:
 
 # =============================================================== WinApi
 class WinApi:
-    EX_FLAGS = 0x80000 | 0x20 | 0x80 | 0x08000000  # layered, click-through,
-    #                                                toolwindow, no-activate
     admin = False
     _mutex = None
     user32 = shell32 = kernel32 = None
@@ -788,34 +770,21 @@ class WinApi:
         except Exception:
             return False
 
-    _eco = None
+
+    # --- by window handle (HWND): used by any UI (Tk, Qt)
 
     @classmethod
-    def set_background_mode(cls, on):
-        """on: Lmonitor is not in front - run below normal priority and ask Windows for
-        "efficiency mode" (EcoQoS: slower cores / E-cores), so the game keeps the fast
-        cores. off: normal again. Only this process is changed; nothing is saved."""
-        on = bool(on)
-        if on == cls._eco:
-            return
-        cls._eco = on
+    def above_normal(cls):
+        """Run Lmonitor at "above normal" priority. It uses about 1 % of the CPU, so this
+        takes nothing away from a game; but when a benchmark or game keeps every core busy
+        (FurMark's CPU burner), a normal-priority Lmonitor got almost no CPU time and its
+        overlays froze for seconds."""
         try:
             k = cls.kernel32
             k.SetPriorityClass.argtypes = [wintypes.HANDLE, wintypes.DWORD]
-            k.SetProcessInformation.argtypes = [wintypes.HANDLE, ctypes.c_int,
-                                                ctypes.c_void_p, wintypes.DWORD]
-            proc = wintypes.HANDLE(-1)                          # this process
-            k.SetPriorityClass(proc, 0x4000 if on else 0x20)   # BELOW_NORMAL / NORMAL
-
-            class Throttle(ctypes.Structure):
-                _fields_ = [("Version", wintypes.ULONG), ("ControlMask", wintypes.ULONG),
-                            ("StateMask", wintypes.ULONG)]
-            st = Throttle(1, 1, 1 if on else 0)                 # EXECUTION_SPEED
-            k.SetProcessInformation(proc, 4, ctypes.byref(st), ctypes.sizeof(st))
+            return bool(k.SetPriorityClass(wintypes.HANDLE(-1), 0x8000))   # ABOVE_NORMAL
         except Exception:
-            pass
-
-    # --- by window handle (HWND): used by any UI (Tk, Qt)
+            return False
 
     @classmethod
     def click_through_hwnd(cls, h, on):
@@ -829,10 +798,6 @@ class WinApi:
     @classmethod
     def keep_on_top_hwnd(cls, h):
         cls.user32.SetWindowPos(h, -1, 0, 0, 0, 0, 0x13)
-
-
-    # --- Tk widget variants (kept for the classic window)
-
 
 
     @staticmethod
@@ -1049,13 +1014,20 @@ class LibreHardwareHost:
         except Exception:
             Logger.error("sensor library reopen")
 
-    @hw_locked
     def enable_extras(self):
         """Load motherboard / drive / battery sensors (first time only).
 
         Done on demand, so start-up stays as fast as before and nothing
-        extra runs unless the Hardware page asks for it.
+        extra runs unless the Hardware page asks for it. The Hardware page calls this on
+        the window's thread every second: after the first time it returns at once, without
+        waiting for the sensor lock (a CPU sensor update holds it ~0.5 s under full load).
         """
+        if self._extras_on or self.computer is None or self.suspended:
+            return
+        with HW_LOCK:
+            self._enable_extras()
+
+    def _enable_extras(self):
         if self._extras_on or self.computer is None or self.suspended:
             return
         self._extras_on = True
@@ -1104,12 +1076,92 @@ class LibreHardwareHost:
         return lines
 
 
+# =============================================================== Slow readings
+class BackgroundReader:
+    """Runs a slow reading on its own thread and lets everyone else use the last result.
+
+    Why: some readings take a few milliseconds on an idle PC but up to a second when
+    every CPU core is busy (a game starting, a benchmark) - measured on the author's
+    laptop: network adapter state 6 -> 700 ms, CPU sensors 2 -> 450 ms, network counters
+    5 -> 145 ms. Done inline they held up the overlay and every chart ("everything
+    freezes"). Now the thread that feeds the overlay never waits for them: it asks
+    (poke) and takes the newest values there are.
+
+    The thread runs only while somebody keeps asking; IDLE seconds after the last poke
+    it ends. SYNC = True (tests) reads inline instead, at most once per period."""
+    IDLE = 30.0                 # seconds without a poke before the thread ends
+    SYNC = False
+    stopped = False             # set once at exit: no reader starts or runs again
+
+    def __init__(self, fn, period=1.0, name="reader"):
+        self.fn, self.period, self.name = fn, float(period), name
+        self.runs = 0
+        self._asked = self._last = self._fast_until = 0.0
+        self._fast = None
+        self._thread = None
+        self._lock = threading.Lock()
+
+    def _run_once(self):
+        if BackgroundReader.stopped:
+            return
+        try:
+            self.fn()
+        except Exception:
+            Logger.error(self.name)
+        self.runs += 1
+        self._last = time.monotonic()
+
+    def _period(self, now):
+        return self._fast if (self._fast and now < self._fast_until) else self.period
+
+    def poke(self, fast=None):
+        """Somebody needs this reading. fast: wanted this often (seconds) for a moment."""
+        now = time.monotonic()
+        self._asked = now
+        if fast:
+            self._fast, self._fast_until = float(fast), now + 2.0
+        if self.SYNC or self.runs == 0:              # the very first values: right away
+            with self._lock:
+                if self.runs == 0 or (self.SYNC and now - self._last >= self._period(now) * 0.8):
+                    self._run_once()
+            if self.SYNC:
+                return
+        t = self._thread
+        if BackgroundReader.stopped:
+            return
+        if t is None or not t.is_alive():
+            with self._lock:
+                t = self._thread
+                if t is None or not t.is_alive():
+                    self._thread = threading.Thread(target=self._loop, name=self.name, daemon=True)
+                    self._thread.start()
+
+    def _loop(self):
+        while not BackgroundReader.stopped:
+            now = time.monotonic()
+            if now - self._asked > self.IDLE:
+                with self._lock:                     # nobody asks any more: end (poke starts it again)
+                    if time.monotonic() - self._asked > self.IDLE:
+                        self._thread = None
+                        return
+            wait = self._period(now) - (now - self._last)
+            if wait > 0:
+                time.sleep(min(wait, 0.25))
+                continue
+            self._run_once()
+
+
 # =============================================================== CPU
 class CpuReader:
     MIN_UPDATE = 0.8                # seconds between two real sensor updates
+
     def __init__(self, host):
         self.host = host
         self.seen = False  # True once a CPU temperature/power was read
+        self._load = None
+        # the sensor library visits every CPU core in turn, which gets very slow when
+        # all cores are busy: done on its own thread
+        self._bg = BackgroundReader(self._update, 1.0, "cpu sensors")
 
     @property
     def name(self):
@@ -1119,9 +1171,11 @@ class CpuReader:
     def available(self):
         return self.host.cpu_hw is not None
 
-    @staticmethod
-    def usage():
-        return psutil.cpu_percent()
+    def usage(self):
+        """CPU usage in % since the last call (its own counters)."""
+        if self._load is None:
+            self._load = CpuLoad()
+        return self._load.read()
 
     def brand_color(self):
         n = self.name
@@ -1131,24 +1185,30 @@ class CpuReader:
             return Theme.AMD_ORANGE
         return Theme.WHITE
 
-    @hw_locked
+    def _update(self):
+        with HW_LOCK:
+            hw = self.host.cpu_hw
+            if hw is not None:
+                hw.Update()
+
     def read(self, want_t, want_p, want_c):
-        """-> (temp C, power W, clock MHz, clock_is_approximate)."""
+        """-> (temp C, power W, clock MHz, clock_is_approximate). Never waits for the
+        sensor library: the values are the ones of its last update (about 1 s old)."""
         h = self.host
         t = p = c = None
         approx = False
         if h.cpu_hw is not None:
-            now = time.monotonic()
-            if now - getattr(self, "_upd", 0.0) >= self.MIN_UPDATE:
-                h.cpu_hw.Update()          # the sensor library is slow: at most ~1/s
-                self._upd = now
-            if want_t:
-                t = h.positive(h.value(h.cpu_temp))
-            if want_p:
-                p = h.positive(h.value(h.cpu_power))
-            if want_c:
-                vals = [v for v in map(h.value, h.cpu_clocks) if v]
-                c = sum(vals) / len(vals) if vals else None
+            self._bg.poke()
+            try:
+                if want_t:
+                    t = h.positive(h.value(h.cpu_temp))
+                if want_p:
+                    p = h.positive(h.value(h.cpu_power))
+                if want_c:
+                    vals = [v for v in map(h.value, list(h.cpu_clocks)) if v]
+                    c = sum(vals) / len(vals) if vals else None
+            except Exception:                        # the library was just closed (safe mode)
+                t = p = c = None
         if t is not None or p is not None:
             self.seen = True
         if want_c and c is None:  # no sensor: use what Windows reports
@@ -1187,13 +1247,12 @@ class GpuReader:
             self.errors[fn.__name__] = repr(e)[:90]
             return None
 
-    @hw_locked
     def fan(self):
-        """GPU fan speed in % (NVIDIA only), else None."""
-        fn = getattr(pynvml, "nvmlDeviceGetFanSpeed", None)
-        if not self.available or fn is None:
+        """GPU fan speed in % (NVIDIA only), else None. From the last background reading."""
+        if not self.available:
             return None
-        return self._q(fn)
+        self._reader().poke()
+        return self._cache[5]
 
     def vendor(self):
         """"nvidia", "amd" or "other" (drives the window's accent color)."""
@@ -1225,61 +1284,94 @@ class GpuReader:
             return Theme.AMD_ORANGE
         return Theme.NVIDIA_GREEN
 
-    @hw_locked
+    # ---- readings: taken on a background thread (see BackgroundReader); read() and
+    # fan() return the newest ones without waiting for the driver
+    _bg = None
+    _cache = (None, None, None, None, None, None)     # use, temp, power, clock, mem, fan
+    _lhm = False                                      # the sensor library is needed too
+
+    def _reader(self):
+        if self._bg is None:
+            self._bg = BackgroundReader(self._poll, 1.0, "gpu sensors")
+        return self._bg
+
+    def _poll(self):
+        use = temp = pw = clk = mem = fan = None
+        if self.available:  # NVIDIA: NVML
+            nv = pynvml
+            u = self._q(nv.nvmlDeviceGetUtilizationRates)
+            use = u.gpu if u is not None else None
+            temp = self._q(nv.nvmlDeviceGetTemperature, nv.NVML_TEMPERATURE_GPU)
+            w = self._q(nv.nvmlDeviceGetPowerUsage)
+            pw = w / 1000 if w is not None else None
+            clk = self._q(nv.nvmlDeviceGetClockInfo, nv.NVML_CLOCK_GRAPHICS)
+            # v2 leaves out the memory the driver reserves for itself (about 240 MB
+            # on an 8 GB card), which is what nvidia-smi and Task Manager report
+            v2 = getattr(nv, "nvmlMemory_v2", None)
+            m = self._q(nv.nvmlDeviceGetMemoryInfo, v2) if v2 is not None else None
+            if m is None:
+                m = self._q(nv.nvmlDeviceGetMemoryInfo)
+            if m is not None and m.total:
+                mem = (m.used / 1024**3, m.total / 1024**3)
+            fn = getattr(nv, "nvmlDeviceGetFanSpeed", None)
+            fan = self._q(fn) if fn is not None else None
+        self._cache = (use, temp, pw, clk, mem, fan)
+        if self._lhm:       # AMD / Intel, or what NVML could not read: the sensor library
+            with HW_LOCK:
+                hw = self.host.gpu_hw
+                if hw is not None:
+                    hw.Update()
+
     def read(self, want, nvml_only=False):
         """(usage %, temp C, power W, clock MHz, (used GB, total GB)).
 
-        `want` is the {key: visible} dict; None means unknown. nvml_only: never fall back
-        to the (slower) sensor library - for fast repeated reads."""
+        `want` is the {key: visible} dict; None means unknown. nvml_only: never use the
+        (slower) sensor library, and read 4 times a second for a moment (real-time charts).
+        The values are at most one reading old; this call never waits for the driver."""
         use = temp = pw = clk = mem = None
-        if self.available:  # NVIDIA: NVML first
-            nv = pynvml
-            if want["g_use"]:
-                u = self._q(nv.nvmlDeviceGetUtilizationRates)
-                use = u.gpu if u is not None else None
-            if want["g_temp"]:
-                temp = self._q(nv.nvmlDeviceGetTemperature,
-                               nv.NVML_TEMPERATURE_GPU)
-            if want["g_pow"]:
-                w = self._q(nv.nvmlDeviceGetPowerUsage)
-                pw = w / 1000 if w is not None else None
-            if want["g_clk"]:
-                clk = self._q(nv.nvmlDeviceGetClockInfo, nv.NVML_CLOCK_GRAPHICS)
-            if want["g_mem"]:
-                # v2 leaves out the memory the driver reserves for itself (about 240 MB
-                # on an 8 GB card), which is what nvidia-smi and Task Manager report
-                v2 = getattr(nv, "nvmlMemory_v2", None)
-                m = self._q(nv.nvmlDeviceGetMemoryInfo, v2) if v2 is not None else None
-                if m is None:
-                    m = self._q(nv.nvmlDeviceGetMemoryInfo)
-                if m is not None and m.total:
-                    mem = (m.used / 1024**3, m.total / 1024**3)
+        self._reader().poke(Hud.REALTIME_PERIOD if nvml_only else None)
+        if self.available:
+            u, t, p, c, m, _fan = self._cache
+            use = u if want["g_use"] else None
+            temp = t if want["g_temp"] else None
+            pw = p if want["g_pow"] else None
+            clk = c if want["g_clk"] else None
+            mem = m if want["g_mem"] else None
         h = self.host
-        if h.gpu_hw is not None and not (nvml_only and self.available):  # AMD / Intel, or NVML gaps
+        if h.gpu_hw is not None and not (nvml_only and self.available):
             gaps = ((want["g_use"] and use is None)
                     or (want["g_temp"] and temp is None)
                     or (want["g_pow"] and pw is None)
                     or (want["g_clk"] and clk is None)
                     or (want["g_mem"] and mem is None))
             if gaps:
-                h.gpu_hw.Update()
-                g, val, pos = h.gpu, h.value, h.positive
-                if want["g_use"] and use is None:
-                    use = val(g.get("use"))
-                if want["g_temp"] and temp is None:
-                    temp = pos(val(g.get("temp")))
-                if want["g_pow"] and pw is None:
-                    pw = pos(val(g.get("pw")))
-                if want["g_clk"] and clk is None:
-                    clk = pos(val(g.get("clk")))
-                if want["g_mem"] and mem is None:
-                    used, total = val(g.get("mem_used")), val(g.get("mem_total"))
-                    free = val(g.get("mem_free"))
-                    if total is None and used is not None and free is not None:
-                        total = used + free
-                    if used is not None and total:
-                        k = 1 / 1024 if total < 1e5 else 1 / 1024**3  # MB / bytes
-                        mem = (used * k, total * k)
+                if not self._lhm:                 # first time: the library is read from now on
+                    self._lhm = True
+                    try:
+                        with HW_LOCK:
+                            h.gpu_hw.Update()
+                    except Exception:
+                        Logger.error("gpu sensor library")
+                try:
+                    g, val, pos = h.gpu, h.value, h.positive
+                    if want["g_use"] and use is None:
+                        use = val(g.get("use"))
+                    if want["g_temp"] and temp is None:
+                        temp = pos(val(g.get("temp")))
+                    if want["g_pow"] and pw is None:
+                        pw = pos(val(g.get("pw")))
+                    if want["g_clk"] and clk is None:
+                        clk = pos(val(g.get("clk")))
+                    if want["g_mem"] and mem is None:
+                        used, total = val(g.get("mem_used")), val(g.get("mem_total"))
+                        free = val(g.get("mem_free"))
+                        if total is None and used is not None and free is not None:
+                            total = used + free
+                        if used is not None and total:
+                            k = 1 / 1024 if total < 1e5 else 1 / 1024**3  # MB / bytes
+                            mem = (used * k, total * k)
+                except Exception:                 # the library was just closed (safe mode)
+                    pass
         return use, temp, pw, clk, mem
 
 
@@ -1292,6 +1384,69 @@ class MemoryReader:
     @staticmethod
     def swap():
         return psutil.swap_memory()
+
+
+# =============================================================== RivaTuner (MSI Afterburner)
+class RivaTuner:
+    """MSI Afterburner's in-game overlay is drawn by RivaTuner Statistics Server (RTSS).
+    RTSS hooks every program that draws with DirectX - Lmonitor's own windows too (the
+    window and its overlays are drawn with Direct3D 11). Then RTSS tries to put its
+    overlay into Lmonitor's windows as well, and Afterburner's overlay in the game
+    misbehaves while Lmonitor is open.
+
+    RTSS itself ships "do not hook this program" profiles for other monitoring tools
+    (HWiNFO, FPS Monitor, Discord, Afterburner): a file Profiles/<program>.cfg with
+    [Hooking] EnableHooking = 0. This writes the same one-line profile for Lmonitor.exe.
+    Nothing else in RTSS is changed; the uninstaller removes the file again."""
+    KEYS = (r"SOFTWARE\WOW6432Node\Unwinder\RTSS", r"SOFTWARE\Unwinder\RTSS")
+    PROFILE = "[Hooking]\nEnableHooking\t\t= 0\n"
+
+    @classmethod
+    def folder(cls):
+        """RTSS's install folder, or "" when it is not installed."""
+        try:
+            import winreg
+        except ImportError:
+            return ""
+        for key in cls.KEYS:
+            try:
+                with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key) as k:
+                    d = winreg.QueryValueEx(k, "InstallDir")[0]
+                    if d and os.path.isdir(d):
+                        return d
+            except OSError:
+                continue
+        return ""
+
+    @classmethod
+    def exclude(cls, exe="Lmonitor.exe", folder=None):
+        """Make sure RTSS leaves this program alone. -> "excluded" / "already" /
+        "no rtss" / an error text."""
+        d = cls.folder() if folder is None else folder
+        if not d:
+            return "no rtss"
+        path = os.path.join(d, "Profiles", exe + ".cfg")
+        try:
+            if os.path.exists(path):
+                with open(path, encoding="utf-8", errors="replace") as f:
+                    text = f.read()
+                if re.search(r"EnableHooking\s*=\s*0", text):
+                    return "already"
+                # a profile the user made: keep it, only switch hooking off
+                if re.search(r"EnableHooking\s*=\s*\d", text):
+                    text = re.sub(r"EnableHooking\s*=\s*\d", "EnableHooking\t\t= 0", text)
+                elif "[Hooking]" in text:
+                    text = text.replace("[Hooking]", "[Hooking]\nEnableHooking\t\t= 0", 1)
+                else:
+                    text = text.rstrip() + "\n" + cls.PROFILE
+            else:
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                text = cls.PROFILE
+            with open(path, "w", encoding="utf-8", newline="\r\n") as f:
+                f.write(text)
+            return "excluded"
+        except OSError as e:
+            return str(e)[:120] or type(e).__name__
 
 
 # =============================================================== Start with Windows
@@ -1378,6 +1533,38 @@ class Autostart:
             return str(e)[:200] or type(e).__name__
 
 
+# =============================================================== Program list
+class _ProcEntry(ctypes.Structure):
+    _fields_ = [("size", wintypes.DWORD), ("usage", wintypes.DWORD), ("pid", wintypes.DWORD),
+                ("heap", ctypes.c_size_t), ("module", wintypes.DWORD), ("threads", wintypes.DWORD),
+                ("parent", wintypes.DWORD), ("prio", ctypes.c_long), ("flags", wintypes.DWORD),
+                ("exe", ctypes.c_wchar * 260)]
+
+
+def process_names():
+    """Names of the running programs (Toolhelp snapshot through ctypes: other threads
+    keep running while Windows answers, unlike psutil.process_iter)."""
+    k = ctypes.windll.kernel32
+    k.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    k.Process32FirstW.argtypes = [wintypes.HANDLE, ctypes.c_void_p]
+    k.Process32NextW.argtypes = [wintypes.HANDLE, ctypes.c_void_p]
+    k.CloseHandle.argtypes = [wintypes.HANDLE]
+    snap = k.CreateToolhelp32Snapshot(0x2, 0)            # TH32CS_SNAPPROCESS
+    if not snap or snap == wintypes.HANDLE(-1).value:
+        return []
+    names = []
+    try:
+        e = _ProcEntry()
+        e.size = ctypes.sizeof(e)
+        ok = k.Process32FirstW(snap, ctypes.byref(e))
+        while ok:
+            names.append(e.exe)
+            ok = k.Process32NextW(snap, ctypes.byref(e))
+    finally:
+        k.CloseHandle(snap)
+    return names
+
+
 # =============================================================== Anti-cheat safe mode
 class SafeMode:
     """Games with kernel anti-cheat (Call of Duty / Warzone, Valorant, Fortnite...) look at
@@ -1404,9 +1591,9 @@ class SafeMode:
     def running(cls):
         """Name of a protected game / anti-cheat program that runs now, or ""."""
         try:
-            for p in psutil.process_iter(["name"]):
-                if cls.is_protected(p.info.get("name")):
-                    return p.info["name"]
+            for name in process_names():
+                if cls.is_protected(name):
+                    return name
         except Exception:
             Logger.error("safe mode scan")
         return ""
@@ -1639,65 +1826,11 @@ class FpsMonitor:
         return fps, avg, p.low, last, graph
 
 
-# =============================================================== PawnIO driver
-
-
-# =============================================================== Diagnostics
-class Diagnostics:
-    def __init__(self, app):
-        self.app = app
-
-    def build(self):
-        a = self.app
-        h = a.host
-        L = [f"Lmonitor report  {time.strftime('%Y-%m-%d %H:%M:%S')}",
-             f"running as admin : {WinApi.admin}",
-             f"PawnIO driver    : "
-             f"{'installed' if a.driver.installed() else 'MISSING'}",
-             f"PawnIO installer : "
-             f"{'bundled' if os.path.exists(Paths.PAWNIO_SETUP) else 'not bundled'}",
-             f"NVIDIA (NVML)    : {a.gpu.available} {a.gpu.name}",
-             f"LibreHardwareMon.: "
-             f"{'loaded' if h.computer is not None else 'FAILED'}",
-             f"CPU              : {h.cpu_name}",
-             f"GPU via LHM      : {h.gpu_type or '-'}",
-             f"PresentMon.exe   : {os.path.exists(Paths.PRESENTMON)}  "
-             f"({a.fps.status})",
-             ""]
-        for fn, err in a.gpu.errors.items():
-            L.append(f"NVML error       : {fn}: {err}")
-        L.append(f"PawnIO service   : {a.driver.service_state()}")
-        L.append(f"PawnIOLib.dll    : {a.driver.library_info()}")
-        L.append("")
-        L += h.dump()
-        try:
-            with open(Paths.LOG_FILE, "r", encoding="utf-8") as f:
-                L += ["---- error.log ----", f.read()[-3000:]]
-        except Exception:
-            pass
-        return L
-
-    def save(self):
-        """Write the report; returns a short message for the menu."""
-        lines = self.build()
-        desk = os.path.join(os.path.expanduser("~"), "Desktop")
-        folder_out = desk if os.path.isdir(desk) else Paths.CFG_DIR
-        path = os.path.join(folder_out, "Lmonitor_report.txt")
-        try:
-            os.makedirs(folder_out, exist_ok=True)
-            with open(path, "w", encoding="utf-8") as f:
-                f.write("\n".join(lines))
-            return "Saved: " + ("Desktop" if folder_out == desk else path)
-        except Exception:
-            Logger.error("save report")
-            return "Could not save the report"
-
-
 # =============================================================== App info
 class AppInfo:
     """Name / version shown in the Hardware > System tab."""
     NAME = "Lmonitor"
-    VERSION = "1.17.7"
+    VERSION = "1.18.0"
     PUBLISHER = ""      # put your name or company here (empty = "Not set")
     URL = "https://github.com/unrealhamed/Lmonitor"
 
@@ -1935,6 +2068,56 @@ class StorageReader:
 
 
 # =============================================================== Network
+class _IfRow2(ctypes.Structure):
+    """MIB_IF_ROW2 (1352 bytes): one network interface in Windows' table."""
+    _fields_ = [("luid", ctypes.c_uint64), ("index", ctypes.c_ulong),
+                ("guid", ctypes.c_byte * 16), ("alias", ctypes.c_wchar * 257),
+                ("description", ctypes.c_wchar * 257), ("addr_len", ctypes.c_ulong),
+                ("addr", ctypes.c_ubyte * 64), ("mtu", ctypes.c_ulong),
+                ("type", ctypes.c_ulong), ("tunnel", ctypes.c_int),
+                ("media", ctypes.c_int), ("physical", ctypes.c_int),
+                ("access", ctypes.c_int), ("direction", ctypes.c_int),
+                ("flags", ctypes.c_ubyte), ("oper", ctypes.c_int), ("admin", ctypes.c_int),
+                ("connect", ctypes.c_int), ("netguid", ctypes.c_byte * 16), ("conntype", ctypes.c_int),
+                ("tx_speed", ctypes.c_uint64), ("rx_speed", ctypes.c_uint64),
+                ("in_octets", ctypes.c_uint64), ("_in", ctypes.c_uint64 * 8),
+                ("out_octets", ctypes.c_uint64), ("_out", ctypes.c_uint64 * 8)]
+
+
+IfInfo = namedtuple("IfInfo", "name recv sent up speed hardware")
+
+
+def interface_table():
+    """Every network interface: (name, bytes received, bytes sent, is up, link Mbit/s,
+    is hardware). One call to Windows (GetIfTable2) through ctypes, which lets the other
+    threads of Lmonitor run while Windows answers. (psutil's network calls keep Python's
+    lock for their whole run; with FurMark's CPU burner they took up to 4 s, and every
+    part of Lmonitor - the overlays too - stood still that long.)"""
+    out = {}
+    api = ctypes.windll.iphlpapi
+    api.GetIfTable2.argtypes = [ctypes.POINTER(ctypes.c_void_p)]
+    api.FreeMibTable.argtypes = [ctypes.c_void_p]
+    table = ctypes.c_void_p()
+    if api.GetIfTable2(ctypes.byref(table)) != 0 or not table.value:
+        return out
+    try:
+        count = ctypes.c_ulong.from_address(table.value).value
+        size = ctypes.sizeof(_IfRow2)
+        for i in range(count):
+            r = _IfRow2.from_address(table.value + 8 + i * size)
+            name = r.alias
+            if not name:
+                continue
+            old = out.get(name)                 # filter layers share the adapter's name
+            info = IfInfo(name, r.in_octets, r.out_octets, r.oper == 1,
+                          int(max(r.rx_speed, r.tx_speed) // 1000000), bool(r.flags & 1))
+            if old is None or (info.hardware and not old.hardware) or info.recv > old.recv:
+                out[name] = info
+    finally:
+        api.FreeMibTable(table)
+    return out
+
+
 class NetworkReader:
     """Download / upload speed of every connected network interface."""
 
@@ -1944,54 +2127,33 @@ class NetworkReader:
         self.info = {}        # nic -> (is up, link speed in Mbit/s)
         self.virtual = set()  # adapters that are not real hardware (VPN, tunnels...)
         self._known = None
+        self._bg = BackgroundReader(self._read, 1.0, "network")
 
     @staticmethod
     def _real(name):
         n = name.lower()
         return not (n.startswith("lo") and len(n) <= 3 or "loopback" in n)
 
-    @staticmethod
-    def _virtual_names():
-        """Names of the adapters Windows marks as not being hardware. Empty if unknown."""
-        class Row(ctypes.Structure):            # the start of MIB_IF_ROW2 (1352 bytes)
-            _fields_ = [("luid", ctypes.c_uint64), ("index", ctypes.c_ulong),
-                        ("guid", ctypes.c_byte * 16), ("alias", ctypes.c_wchar * 257),
-                        ("description", ctypes.c_wchar * 257), ("addr_len", ctypes.c_ulong),
-                        ("addr", ctypes.c_ubyte * 64), ("mtu", ctypes.c_ulong),
-                        ("type", ctypes.c_ulong), ("tunnel", ctypes.c_int),
-                        ("media", ctypes.c_int), ("physical", ctypes.c_int),
-                        ("access", ctypes.c_int), ("direction", ctypes.c_int),
-                        ("flags", ctypes.c_ubyte)]
-        out = set()
-        try:
-            api = ctypes.windll.iphlpapi
-            table = ctypes.c_void_p()
-            if api.GetIfTable2(ctypes.byref(table)) != 0:
-                return out
-            try:
-                count = ctypes.c_ulong.from_address(table.value).value
-                for i in range(count):
-                    row = Row.from_address(table.value + 8 + i * 1352)
-                    if not row.flags & 1:       # InterfaceAndOperStatusFlags.HardwareInterface
-                        out.add(row.alias)
-            finally:
-                api.FreeMibTable(table)
-        except Exception:
-            Logger.error("network adapter list")
-        return out
-
     def read(self):
+        """Ask for fresh speeds. They are measured on a background thread (Windows'
+        network calls get very slow on a fully loaded PC); total() / interfaces() give
+        the newest ones."""
+        self._bg.poke()
+
+    def _read(self):
         now = time.time()
         try:
-            counters = psutil.net_io_counters(pernic=True)
-            stats = psutil.net_if_stats()
+            table = interface_table()
         except Exception:
+            Logger.error("network table")
             return
-        if set(counters) != self._known:        # adapters came or went
-            self._known = set(counters)
-            self.virtual = self._virtual_names()
-        self.info = {n: (s.isup, s.speed) for n, s in stats.items()
-                     if self._real(n)}
+        if not table:
+            return
+        if set(table) != self._known:            # adapters came or went
+            self._known = set(table)
+            self.virtual = {n for n, t in table.items() if not t.hardware}
+        self.info = {n: (t.up, t.speed) for n, t in table.items() if self._real(n)}
+        counters = {n: (t.recv, t.sent) for n, t in table.items()}
         if self.prev is None:
             self.prev = (now, counters)
             return
@@ -2000,8 +2162,7 @@ class NetworkReader:
             return
         old = self.prev[1]
         self.speeds = {
-            n: (max(0.0, (c.bytes_recv - old[n].bytes_recv) / dt),
-                max(0.0, (c.bytes_sent - old[n].bytes_sent) / dt))
+            n: (max(0.0, (c[0] - old[n][0]) / dt), max(0.0, (c[1] - old[n][1]) / dt))
             for n, c in counters.items() if n in old and self._real(n)}
         self.prev = (now, counters)
 
@@ -2043,15 +2204,17 @@ class SensorReader:
 
     def __init__(self, host, gpu):
         self.host, self.gpu = host, gpu
-        self._t = 0.0
         self._data = []
+        self._bg = BackgroundReader(self._read, self.TTL, "board sensors")
+
+    def read(self):
+        """[(hardware type, hardware name, sensor type, sensor name, value)].
+        Read on a background thread every TTL seconds; this returns the newest list."""
+        self._bg.poke()
+        return self._data
 
     @hw_locked
-    def read(self):
-        """[(hardware type, hardware name, sensor type, sensor name, value)]."""
-        now = time.time()
-        if self._t and now - self._t < self.TTL:
-            return self._data
+    def _read(self):
         h = self.host
         hardware = list(h.extra_hw)
         if h.gpu_hw is not None:
@@ -2068,66 +2231,8 @@ class SensorReader:
                                     str(x.Name), v))
             except Exception:
                 Logger.error("sensor read")
-        self._data, self._t = out, now
+        self._data = out
         return out
-
-
-# =============================================================== Recorder
-class Recorder:
-    """Long history for the dashboard chart: CPU / RAM / GPU every 5 seconds
-    (24 hours kept, about 1 MB). The reading runs in a worker thread."""
-    STEP = 5.0
-    KEEP = int(24 * 3600 / STEP)
-
-    def __init__(self, gpu):
-        self.gpu = gpu
-        self.load = CpuLoad()          # its own counters
-        self.data = deque(maxlen=self.KEEP)   # (time, cpu, ram, gpu)
-        self.busy = False
-        self._last = 0.0
-
-    def tick(self, snap=None):
-        """Record one point. With `snap` (the telemetry reading that was just
-        taken) nothing is read again; without it a worker thread reads."""
-        if snap is not None:
-            now = time.time()
-            if now - self._last >= self.STEP - 0.2:     # one point per STEP
-                self._last = now
-                self.data.append((now, snap.get("c_use"), snap.get("r_use"),
-                                  snap.get("g_use")))
-            return
-        if self.busy:
-            return
-        self.busy = True
-        threading.Thread(target=self._record, daemon=True).start()
-
-    def _record(self):
-        try:
-            self.data.append((time.time(), self.load.read(),
-                              psutil.virtual_memory().percent,
-                              self.gpu.read(Telemetry.ALL)[0]))
-        except Exception:
-            Logger.error("recorder")
-        finally:
-            self.busy = False
-
-    def series(self, seconds, points=90):
-        """[cpu, ram, gpu] of the last `seconds`, averaged into `points`
-        buckets (None where nothing was recorded)."""
-        t0 = time.time() - seconds
-        width = seconds / points
-        sums = [[0.0] * points for _ in range(3)]
-        cnt = [[0] * points for _ in range(3)]
-        for row in list(self.data):
-            if row[0] < t0:
-                continue
-            b = min(points - 1, int((row[0] - t0) / width))
-            for k in range(3):
-                if row[1 + k] is not None:
-                    sums[k][b] += row[1 + k]
-                    cnt[k][b] += 1
-        return [[(sums[k][b] / cnt[k][b]) if cnt[k][b] else None
-                 for b in range(points)] for k in range(3)]
 
 
 # =============================================================== Game sessions
@@ -2503,13 +2608,19 @@ class SessionRecorder:
         self.version = 0            # +1 whenever a session was saved
         self.last_id = None
         self.procs = {}             # psutil.Process objects (cpu% needs history)
+        self._bg = None
 
     # ---- scheduling
     def tick(self):
+        """One cycle on the recorder's own thread (one thread for good: starting a new
+        thread every 2 s took 40+ ms each when all cores were busy)."""
         if self.busy:
             return
         self.busy = True
-        threading.Thread(target=self._run, daemon=True).start()
+        if self._bg is None:
+            self._bg = BackgroundReader(self._run, 2.0, "session recorder")
+            self._bg.IDLE = 30.0
+        self._bg.poke()
 
     def _run(self):
         try:
@@ -2777,39 +2888,6 @@ class SessionView:
                          f"of the PC's CPU or over {SessionAnalyzer.HEAVY_MB} MB. "
                          "Close what you do not need before playing.", "")
         return rows
-
-    # (label, key, lower-is-better, number format, unit)
-    CMP = [("Average FPS", "avg_fps", False, ".1f", ""),
-           ("1% low FPS", "low1", False, ".1f", ""),
-           ("CPU temp (max)", ("c_temp", 1), True, ".0f", " °C"),
-           ("GPU temp (max)", ("g_temp", 1), True, ".0f", " °C"),
-           ("CPU usage (avg)", ("c_use", 0), True, ".0f", " %"),
-           ("GPU usage (avg)", ("g_use", 0), None, ".0f", " %"),
-           ("RAM used (peak)", ("ram", 1), True, ".0f", " %")]
-
-    @staticmethod
-    def _get(s, key):
-        if isinstance(key, tuple):
-            v = s.get(key[0])
-            return v[key[1]] if v else None
-        return s.get(key)
-
-
-    STAT = {"possible": "possible throttle", "clock_dip": "clock dip",
-            "hot_no_drop": "hot, no drop", "ok": "none seen", "cool": "none seen",
-            "low": "low RAM",
-            "no_temp": "unknown", "no_clock": "unknown", "few": "unknown",
-            "unknown": "unknown"}
-
-    @staticmethod
-    def title(sess):
-        s = sess["summary"]
-        when = time.strftime("%d %b %H:%M", time.localtime(sess["start"]))
-        fps = s.get("avg_fps")
-        return (("● " if s.get("live") else "") + f"{s['game']}",
-                f"{when}  {SessionView.clock(s['duration'])}"
-                + (f"  {fps:.0f} fps" if fps else ""))
-
 
 # =============================================================== Diagnostics
 class ScanStore:
@@ -3853,7 +3931,6 @@ class Optimizer:
         return kw
 
     def _log(self, kind, title, before, after, revert, verified):
-        import datetime
         return self.log.add({"t": time.time(), "kind": kind, "title": title,
                              "before": before, "after": after,
                              "revert": revert, "verified": verified,
@@ -4913,27 +4990,36 @@ class Telemetry:
         return rows
 
 
-# =============================================================== Displays
-Monitor = namedtuple("Monitor", "name index x y w h primary res_w res_h hz")
-
-
-
-
+# =============================================================== CPU usage
 class CpuLoad:
-    """CPU usage for the dashboard.
+    """CPU usage of the whole PC in % since the last read (own counters per instance).
 
-    Uses its own counters so it never disturbs the overlay's psutil reading.
-    """
+    Uses Windows' GetSystemTimes: one cheap call. (psutil.cpu_times() asks for every
+    core and took 80 ms per call on a fully loaded 20-thread CPU.)"""
 
     def __init__(self):
-        self.prev = psutil.cpu_times()
+        self.prev = self._times()
+
+    @staticmethod
+    def _times():
+        """-> (idle, busy + idle) in 100 ns units."""
+        try:
+            idle, kernel, user = wintypes.FILETIME(), wintypes.FILETIME(), wintypes.FILETIME()
+            if ctypes.windll.kernel32.GetSystemTimes(ctypes.byref(idle), ctypes.byref(kernel),
+                                                     ctypes.byref(user)):
+                v = lambda f: (f.dwHighDateTime << 32) | f.dwLowDateTime
+                return v(idle), v(kernel) + v(user)        # kernel time includes idle time
+        except Exception:
+            pass
+        t = psutil.cpu_times()
+        return t.idle * 1e7, sum(t) * 1e7
 
     def read(self):
-        cur = psutil.cpu_times()
+        cur = self._times()
         a, b = self.prev, cur
         self.prev = cur
-        total = sum(b) - sum(a)
-        idle = b.idle - a.idle
+        total = b[1] - a[1]
+        idle = b[0] - a[0]
         if total <= 0:
             return 0.0
         return max(0.0, min(100.0, (1 - idle / total) * 100))

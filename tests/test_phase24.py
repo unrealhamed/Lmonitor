@@ -55,22 +55,17 @@ chk("the GPU is chosen before the QApplication exists",
 # ---- 2. a full-screen game in front: no animation, no window updates, background mode
 from lmonitor.engine import WinApi
 chk("full-screen check exists", callable(getattr(WinApi, "fullscreen_app", None)))
-chk("background mode exists", callable(getattr(WinApi, "set_background_mode", None)))
+chk("background mode is gone (v1.17.8: below-normal priority + efficiency mode starved "
+    "Lmonitor when a game loaded every core)", getattr(WinApi, "set_background_mode", None) is None)
 if sys.platform == "win32":
     WinApi.setup()
     r = WinApi.fullscreen_app()
     chk("full-screen check answers True/False", r in (True, False))
-    WinApi.set_background_mode(True)
-    import psutil
-    chk("background mode lowers this process's priority",
-        psutil.Process().nice() == psutil.BELOW_NORMAL_PRIORITY_CLASS)
-    WinApi.set_background_mode(False)
-    chk("normal priority comes back", psutil.Process().nice() == psutil.NORMAL_PRIORITY_CLASS)
 main = read("lmonitor", "qt", "qml", "Main.qml")
 chk("chart clock stops while a full-screen program is in front", "!backend.covered" in main)
 br = read("lmonitor", "qt", "bridge.py")
 chk("the window gets no new data while covered", "shown = self._ui_visible and not covered" in br)
-chk("focus changes switch background mode at once", "applicationStateChanged" in app
+chk("focus changes are still reported", "applicationStateChanged" in app
     and "setAppActive" in br)
 
 # ---- 3. the overlay over a game: no resize / restyle every half second

@@ -5,7 +5,7 @@ It puts a small click-through bar over your game (FPS, 1% lows, CPU / GPU / RAM 
 
 [فارسی](README.fa.md) · [Download](https://github.com/unrealhamed/Lmonitor/releases) · [Report a bug](https://github.com/unrealhamed/Lmonitor/issues/new?template=bug_report.md) · [Request a feature](https://github.com/unrealhamed/Lmonitor/issues/new?template=feature_request.md)
 
-> **Status: early release (v1.17.7).** Tested by the author on one Windows 11 laptop (NVIDIA RTX 4070 Laptop GPU + Intel Core i7-12700H). Some sensors may show `n/a` on other hardware. Bug reports are welcome.
+> **Status: early release (v1.18.0).** Tested by the author on one Windows 11 laptop (NVIDIA RTX 4070 Laptop GPU + Intel Core i7-12700H). Some sensors may show `n/a` on other hardware. Bug reports are welcome.
 
 ## Screenshots
 
@@ -71,15 +71,17 @@ Small **live line charts** over your game - for example GPU and CPU temperature 
 - **Look:** *Gaming HUD* (corner brackets, glowing lines) or *Clean*; 7 color themes (*Neon, Toxic, Crimson, Violet, Ice, Gold, Mono*); small / medium / large; column, row or grid; background opacity from 0 to 100 %.
 - **Position:** it floats - put the mouse on its **top edge and drag it**, no button and no key (the rest of the overlay lets clicks through; while a full-screen game is in front the edge does not take the mouse, hold **Ctrl** to drag it there). You can also drag it in the page's preview, pick a corner, and choose the monitor.
 - **Visibility:** always, or **F10** shows and hides it.
-- **Made for gaming:** it is redrawn only when the line has moved about a third of a pixel (not at the screen's full refresh rate), never changes its size by itself, and mouse clicks go through it. Measured with a full-screen window in front: 0.2 % CPU (1 min span) / 0.7 % (real time). FPS and frame time need a game in front (PresentMon).
+- **Made for gaming:** it is redrawn only when the line has moved about half a pixel (not at the screen's full refresh rate), never changes its size by itself, and mouse clicks go through it. Measured on the author's laptop with only the graph overlay on (v1.18.0, % of one CPU core): 1.7 % (1 min span), 1.9 % (real time, *Power saver*), 8 % (real time, smooth - it moves 45 times a second). FPS and frame time need a game in front (PresentMon).
 
 ## Light on your games
 
-Version 1.17.1 was a performance release. Measured on the author's laptop (RTX 4070 Laptop + Intel Iris Xe, 144 Hz screen):
+Versions 1.17.1 and 1.18.0 were performance releases. Measured on the author's laptop (RTX 4070 Laptop + Intel Iris Xe, 144 Hz screen):
 
 - **The window is drawn on the GPU that drives the screen** (on most laptops the Intel / AMD integrated GPU), not on the game GPU. Before, Lmonitor's window used the NVIDIA GPU (about 20 % of its copy engine and ~300 MB of video memory); now it uses 0 % and ~8 MB there.
 - **A full-screen game in front stops the window completely:** no chart animation and no window updates while you play. Measured with the dashboard open behind a full-screen window: CPU 1.0 % → 0.2 %, GPU 16 % → 0.7 %.
-- **Background mode:** while Lmonitor is not the window you are using, it runs at *below normal* priority and asks Windows for *efficiency mode* (slower / efficiency cores), so the game keeps the fast cores.
+- **No freeze under full load (1.17.8):** when a benchmark or a game start keeps every core busy (tested with FurMark's CPU burner), the overlays kept updating: new numbers every 0.26 s and no pause longer than 0.45 s (before: pauses of 2 - 6 s). Slow Windows readings (network, program list) now run on their own threads without blocking the rest, and Lmonitor runs at *above normal* priority - it uses about 1 % of one core, so this takes nothing from the game, but at normal priority Windows gave its drawing no time while every core was busy.
+- **Lighter (1.18.0):** with only the tray icon, Lmonitor uses 0.55 % of one core (was 1.4 %); with the overlay bar 0.9 % (was 2.0 %). Overlays that are switched off no longer watch the keyboard, the window no longer rebuilds its rows on every reading, and charts draw at most ~70 steps a second on 120 / 144 / 165 Hz screens.
+- **MSI Afterburner / RivaTuner (1.17.8):** RivaTuner hooks every program that draws with DirectX, Lmonitor's windows too, and its overlay then misbehaved while Lmonitor was open. Lmonitor now gets the same *do not hook* profile RivaTuner ships for HWiNFO and Discord (`Profiles\Lmonitor.exe.cfg`); the uninstaller removes it.
 - **The overlay bar no longer resizes or restyles itself** every time a number gets one digit longer (each resize of an always-on-top window over a game cost frames).
 - **PresentMon** now only tracks frame times (no GPU-work or input tracking) and skips programs that are never games (browsers, Windows shell).
 

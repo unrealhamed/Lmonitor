@@ -95,6 +95,7 @@ def _run():
     from lmonitor.qt.bridge import Bridge
     from lmonitor.qt.overlay import OverlayHost
     WinApi.setup()
+    WinApi.above_normal()              # see WinApi.above_normal: FurMark froze the overlays
     if "--no-admin" in sys.argv:       # dev run: UI only, no CPU temperature
         WinApi.admin = WinApi.is_admin()
     else:
@@ -102,6 +103,11 @@ def _run():
     WinApi.single_instance()           # a second copy just exits (same as the Tk app)
     from lmonitor.qt import gpu_pick
     gpu_note = gpu_pick.apply()        # draw on the screen's GPU, not the game's GPU
+    if getattr(sys, "frozen", False):  # MSI Afterburner / RivaTuner: do not hook Lmonitor
+        from lmonitor.engine import RivaTuner, Logger
+        rt = RivaTuner.exclude(os.path.basename(sys.executable))
+        if rt not in ("excluded", "already", "no rtss"):
+            Logger.error("rivatuner profile", rt)
     app = QApplication(sys.argv)
     app.setApplicationName("Lmonitor")
     app.setQuitOnLastWindowClosed(False)   # closing the window keeps the overlay + tray

@@ -12,10 +12,10 @@ import psutil
 from copy import deepcopy
 
 from lmonitor.graphs import GraphHistory
-from lmonitor.engine import (AppInfo, CardStatus, ChangeLog, CpuLoad, Hud, SafeMode, Optimizer, Reports, SessionRecorder,
+from lmonitor.engine import (AppInfo, BackgroundReader, CardStatus, ChangeLog, CpuLoad, Hud, SafeMode, Optimizer, Reports, SessionRecorder,
                              SessionStore, SessionView, Storage, fmt_size, pretty_name, Metrics, OverlayModel, CpuReader, DiagAnalyzer,
                              DiagRunner, FpsMonitor, GpuReader, LibreHardwareHost,
-                             Logger, MemoryReader, Recorder, ReportBuilder,
+                             Logger, MemoryReader, ReportBuilder,
                              ScanStore, SessionAnalyzer, Settings, Telemetry,
                              Theme, WinApi, GameSettings, fmt_net, Profiles)
 
@@ -36,7 +36,6 @@ class Backend:
         Theme.apply_ui(self.settings["ui_theme"], self.settings["ui_accent"])
         self.memory = MemoryReader()
         self.fps = FpsMonitor()
-        self.recorder = Recorder(self.gpu)
         self.graphs = GraphHistory()
         self.graph_fans = False         # fan RPM is read only while the Graphs page is open
         self.scanner = DiagRunner(ScanStore())
@@ -58,10 +57,13 @@ class Backend:
         # graph overlay: its own short history (5 min at most, 4 readings/s in real time)
         self.hud_hist = GraphHistory(keys=self.HUD_KEYS, keep=330)
         self._hud_t, self._hud_live = 0.0, {}
-        self._hud_load = CpuLoad()                  # its own CPU counters
 
     # ---- anti-cheat safe mode (see engine.SafeMode)
     safe_active, safe_game, _safe_t = False, "", 0.0
+    _safe_bg, _safe_found = None, ""
+
+    def _safe_scan(self):
+        self._safe_found = SafeMode.running()
 
     def safe_tick(self, now=None):
         """Every 5 s: is a protected game running? Then stop using the sensor driver."""
@@ -70,7 +72,12 @@ class Backend:
             return self.safe_active
         self._safe_t = now
         mode = self.settings["safe_mode"]
-        game = SafeMode.running() if mode == "auto" else ""
+        game = ""
+        if mode == "auto":                    # the list of programs is read on its own thread
+            if self._safe_bg is None:
+                self._safe_bg = BackgroundReader(self._safe_scan, 5.0, "safe mode scan")
+            self._safe_bg.poke()
+            game = self._safe_found
         active = mode == "always" or bool(game)
         self.safe_game = game
         if active != self.safe_active:
@@ -86,7 +93,6 @@ class Backend:
     def sample(self):
         """One telemetry reading (call from a worker thread, never the UI)."""
         self.telemetry.sample()
-        self.recorder.tick(self.telemetry.snap)     # reuses this reading
         fans = ({n: v for _, _, st, n, v in self.telemetry.sensors.read() if st == "Fan"}
                 if self.graph_fans else None)
         self.graphs.add(self.telemetry.snap, fans, time.time())
@@ -242,16 +248,7 @@ class Backend:
     def hardware_sections(self, tab):
         """Hardware rows grouped into sections [{title, rows}], and split in
         two columns of similar height for the page."""
-        secs = []
-        for r in self.hardware(tab):
-            if r[0] == "head":
-                secs.append({"title": str(r[1]), "rows": []})
-                continue
-            if not secs:
-                secs.append({"title": "", "rows": []})
-            secs[-1]["rows"].append({"kind": r[0], "a": str(r[1]),
-                                     "b": str(r[2]) if len(r) > 2 else "",
-                                     "c": r[3] if len(r) > 3 else None})
+        secs = self.sections(self.hardware(tab))
         cols, heights = [[], []], [0, 0]
         for sec in secs:
             i = 0 if heights[0] <= heights[1] else 1
@@ -469,7 +466,8 @@ class Backend:
                 use, temp, pw, _clk, _mem = self.gpu.read(self.HUD_FAST, nvml_only=True)
                 if self.gpu.available:
                     vals.update(g_use=use, g_temp=temp, g_pow=pw)
-                vals["c_use"] = self._hud_load.read()
+                # CPU usage stays the once-a-second reading: asking Windows for it costs
+                # ~70 ms per call when every core is busy (measured with FurMark)
                 vals["r_use"] = psutil.virtual_memory().percent
             except Exception:
                 Logger.error("hud fast read")
@@ -672,8 +670,18 @@ class Backend:
         return self.sections(rows)
 
     def close(self):
-        """Stop what the engine started (sensor host, PresentMon)."""
+        """Stop what the engine started (readers, PresentMon, sensor library).
+
+        The readers stop first; then the sensor library is closed under its lock, so no
+        thread is inside it when Python and .NET shut down. (Before, a reader thread could
+        still call it during shutdown: "'MethodObject' object is not callable" in
+        error.log.) Closing it also lets go of the PawnIO driver cleanly."""
+        BackgroundReader.stopped = True
         try:
             self.fps.stop()
         except Exception:
             Logger.error("backend close")
+        try:
+            self.host.suspend()
+        except Exception:
+            Logger.error("sensor library close at exit")

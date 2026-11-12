@@ -31,7 +31,10 @@ Item {
             for (var j = 0; j < all[i].length; ++j) if (all[i][j] > m) m = all[i][j]
         return Math.max(1024, m * 1.15)
     }
-    readonly property var fanNames: Object.keys(d.fans || {})
+    // the names change only when a fan appears / disappears: a text key keeps the lists (and
+    // the chips built from them) from being rebuilt on every new reading (4 times a second)
+    readonly property string fanKey: Object.keys(d.fans || {}).join("\u0001")
+    readonly property var fanNames: fanKey === "" ? [] : fanKey.split("\u0001")
     readonly property var fanColors: [Tokens.green, "#7ee0d0", Tokens.warn, "#c8d0e0"]
     readonly property var fanSeries: fanNames.map(function (n) { return d.fans[n] })
     readonly property real fanMax: {

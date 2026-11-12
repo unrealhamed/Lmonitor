@@ -47,8 +47,15 @@ class OverlayHost(QObject):
                         | Qt.WindowDoesNotAcceptFocus | Qt.WindowTransparentForInput)
         window.widthChanged.connect(self.apply)
         window.heightChanged.connect(self.apply)
-        self.poll.start()
         self.apply()
+
+    def _sync_poll(self):
+        """F9 and "stay on top" are only watched while the bar is switched on."""
+        need = bool(self.b.settings["on"]) or self.moving or self.state != "hidden"
+        if need and not self.poll.isActive():
+            self.poll.start()
+        elif not need and self.poll.isActive():
+            self.poll.stop()
 
     # ---- monitor / geometry
     def screen(self):
@@ -100,6 +107,7 @@ class OverlayHost(QObject):
         w = self.win
         if w is None:
             return
+        self._sync_poll()
         try:
             show = self.wanted()
             if self.moving:
@@ -265,8 +273,15 @@ class HudHost(QObject):
                         | Qt.WindowDoesNotAcceptFocus | Qt.WindowTransparentForInput)
         window.widthChanged.connect(self.apply)
         window.heightChanged.connect(self.apply)
-        self.poll.start()
         self.apply()
+
+    def _sync_poll(self):
+        """F10, dragging and "stay on top" are only watched while this overlay is on."""
+        need = bool(self.S("on")) or self.grab or self._drag
+        if need and not self.poll.isActive():
+            self.poll.start()
+        elif not need and self.poll.isActive():
+            self.poll.stop()
 
     def screen(self):
         want = self.S("monitor")
@@ -299,6 +314,7 @@ class HudHost(QObject):
         w = self.win
         if w is None:
             return
+        self._sync_poll()
         try:
             if self.wanted():
                 if not self.grab:                  # never pull it away from the mouse

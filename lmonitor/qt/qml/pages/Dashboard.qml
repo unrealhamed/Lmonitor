@@ -85,16 +85,16 @@ Item {
 
     // ---- welcome
     Card {
+        id: welcome
         x: 0; y: page.bodyY; width: page.leftW; height: page.rowA; tint: true
         Text { x: 22; y: 20; text: Tr.t("Welcome back"); color: Tokens.sub
                font.family: Tokens.font; font.pixelSize: Tokens.fsBody }
         Text { x: 22; y: 40; width: parent.width - 44; elide: Text.ElideRight
                text: page.ready && page.d.user ? page.d.user : Tr.t("Gamer")
                color: Tokens.text; font.family: Tokens.font; font.pixelSize: 34; font.bold: true }
-        Column {
-            x: 22; y: 100; spacing: 12
-            Repeater {
-                model: [
+        // The rows stay; only their texts change each second (a list made anew every second
+        // made the Repeater delete and build all its rows again).
+        readonly property var checks: [
                     {t: Tr.t("Temperatures"), s: page.tempStatus, sub: page.tempLine()},
                     {t: Tr.t("Memory"), s: page.ready ? page.ramC.status || "none" : "none",
                      sub: page.ready && page.ramC.used_gb !== undefined ? page.ramC.used_gb.toFixed(1) + Tr.t(" of ") + Math.round(page.ramC.total_gb) + Tr.t(" GB used") : ""},
@@ -103,13 +103,19 @@ Item {
                     {t: Tr.t("FPS capture"), s: page.ready ? (({ready: "ok", missing: "warm", idle: "none"})[page.st.fps] || "none") : "none",
                      sub: page.ready ? (({ready: Tr.t("Ready"), missing: Tr.t("Capture tool missing"), idle: Tr.t("Starts with a game")})[page.st.fps] || "") : ""}
                 ]
+        Column {
+            x: 22; y: 100; spacing: 12
+            Repeater {
+                model: 4
                 Row {
+                    id: checkRow
+                    readonly property var c: welcome.checks[index] || ({})
                     spacing: 12
-                    Dot { y: 6; status: modelData.s }
+                    Dot { y: 6; status: checkRow.c.s || "none" }
                     Column {
-                        Text { text: modelData.t || ""; color: Tokens.text
+                        Text { text: checkRow.c.t || ""; color: Tokens.text
                                font.family: Tokens.font; font.pixelSize: 15; font.bold: true }
-                        Text { text: Tr.t(modelData.sub || ""); color: Tokens.dim
+                        Text { text: Tr.t(checkRow.c.sub || ""); color: Tokens.dim
                                font.family: Tokens.font; font.pixelSize: Tokens.fsSmall }
                     }
                 }
@@ -182,6 +188,7 @@ Item {
         onRangePicked: function (i) { backend.setRange(i) }
     }
     Card {
+        id: nowCard
         x: Math.round(page.width * 0.58) + page.g / 2; y: page.bodyY + page.rowA + page.g
         width: page.width - x; height: page.rowB
         Text { x: 20; y: 16; text: Tr.t("Right now"); color: Tokens.text
@@ -189,10 +196,7 @@ Item {
         FitBar { x: 16; y: 50; width: parent.width - 32; height: 54
                  model: backend.overlay.groups.length > 0 ? backend.overlay : backend.preview
                  style: backend.settings }
-        Column {
-            x: 20; y: 118; width: parent.width - 40; spacing: 9
-            Repeater {
-                model: [
+        readonly property var facts: [
                     {t: "Game", on: !!page.now.game,
                      v: page.now.game ? page.now.game.name : Tr.t("No game in front")},
                     {t: "Frame rate", on: !!page.now.game,
@@ -206,15 +210,21 @@ Item {
                     {t: "Anti-cheat safe mode", on: page.safe.active === true,
                      v: page.safe.active ? Tr.line(Tr.t("Active now") + (page.safe.game ? "  ·  " + page.safe.game : "")) : Tr.t("Not active now")}
                 ]
+        Column {
+            x: 20; y: 118; width: parent.width - 40; spacing: 9
+            Repeater {
+                model: 5                    // fixed rows: only their texts change each second
                 Item {
+                    id: fact
+                    readonly property var f: nowCard.facts[index] || ({})
                     width: parent.width; height: 22
-                    Rectangle { y: 7; width: 8; height: 8; radius: 4; color: modelData.on ? Tokens.accent : Tokens.dim }
-                    Text { x: 18; anchors.verticalCenter: parent.verticalCenter; text: Tr.t(modelData.t); color: Tokens.sub
+                    Rectangle { y: 7; width: 8; height: 8; radius: 4; color: fact.f.on ? Tokens.accent : Tokens.dim }
+                    Text { x: 18; anchors.verticalCenter: parent.verticalCenter; text: Tr.t(fact.f.t || ""); color: Tokens.sub
                            font.family: Tokens.font; font.pixelSize: Tokens.fsBody }
                     Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                            width: parent.width - 170; horizontalAlignment: Text.AlignRight; elide: Text.ElideRight
-                           text: modelData.v || ""; color: modelData.on ? Tokens.text : Tokens.sub
-                           font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: modelData.on }
+                           text: fact.f.v || ""; color: fact.f.on ? Tokens.text : Tokens.sub
+                           font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: fact.f.on === true }
                 }
             }
         }

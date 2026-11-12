@@ -14,12 +14,9 @@ from lmonitor.backend import Backend
 from lmonitor import engine as E
 b = Backend()
 b.sample()
-# --- recorder reuses the telemetry reading and keeps one point per STEP
-n0 = len(b.recorder.data)
+# --- 1.18.0: the 24-hour recorder was removed (nothing showed it; the charts use GraphHistory)
 for _ in range(5): b.sample()
-chk("recorder keeps one point per 5 s (not one per sample)", len(b.recorder.data) - n0 <= 1)
-b.recorder._last = 0; b.recorder.tick({"c_use": 1, "r_use": 2, "g_use": 3})
-chk("recorder.tick(snap) stores the given values without reading again", b.recorder.data[-1][1:] == (1, 2, 3))
+chk("no unused 24-hour recorder any more", not hasattr(b, "recorder") and not hasattr(E, "Recorder"))
 # --- overlay readings are throttled to the refresh interval
 calls = []
 orig = b.overlay_model.system
