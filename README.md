@@ -5,7 +5,7 @@ It puts a small click-through bar over your game (FPS, 1% lows, CPU / GPU / RAM 
 
 [فارسی](README.fa.md) · [Download](https://github.com/unrealhamed/Lmonitor/releases) · [Report a bug](https://github.com/unrealhamed/Lmonitor/issues/new?template=bug_report.md) · [Request a feature](https://github.com/unrealhamed/Lmonitor/issues/new?template=feature_request.md)
 
-> **Status: early release (v1.17.6).** Tested by the author on one Windows 11 laptop (NVIDIA RTX 4070 Laptop GPU + Intel Core i7-12700H). Some sensors may show `n/a` on other hardware. Bug reports are welcome.
+> **Status: early release (v1.17.7).** Tested by the author on one Windows 11 laptop (NVIDIA RTX 4070 Laptop GPU + Intel Core i7-12700H). Some sensors may show `n/a` on other hardware. Bug reports are welcome.
 
 ## Screenshots
 
@@ -15,9 +15,11 @@ It puts a small click-through bar over your game (FPS, 1% lows, CPU / GPU / RAM 
 |---|---|
 | ![Graph overlay: four live charts - GPU temperature, GPU usage, CPU usage and RAM usage - in the Neon gaming HUD style](docs/screenshots/graph-overlay-hud.png) | ![Graph overlay page: live preview, chart picker, time span, position, color themes, size and layout](docs/screenshots/graph-overlay.png) |
 
-| Overlay settings | Optimizer |
+| Graphs (real time) | Overlay settings |
 |---|---|
-| ![Overlay page: live preview of the bar, density, position, appearance and the metrics it shows](docs/screenshots/overlay-settings.png) | ![Optimizer page: quick presets, Windows game settings, power plan, startup programs and undo history](docs/screenshots/optimizer.png) |
+| ![Graphs page: CPU and GPU temperature, RAM, CPU and GPU usage, download and fan speed in real time](docs/screenshots/graphs.png) | ![Overlay page: live preview of the bar, density, position, appearance and the metrics it shows](docs/screenshots/overlay-settings.png) |
+
+![Personalize page: start with Windows, interface size, corners, font, ten app themes and accent colors](docs/screenshots/personalize.png)
 
 ## Download and install
 
@@ -63,7 +65,7 @@ Values turn from white to warning colors with load and temperature (these limits
 Small **live line charts** over your game - for example GPU and CPU temperature next to FPS. Turn it on in **Graph overlay** (side menu, *Gaming*). There are **two** of them (*Graph 1* and *Graph 2*), each with its own charts, place and look.
 
 - **Charts:** FPS, frame time, GPU / CPU temperature, GPU / CPU / RAM usage, GPU / CPU power - pick up to 6, in your own order. Each chart shows the live value and the lowest / highest value of the time span.
-- **Time span:** *Real time* (the last 10 seconds, read 4 times a second - frame time shows the worst frame of each moment, so stutters stand out), 30 s, 1 min, 2 min or 5 min.
+- **Time span:** *Real time* (the last 10 seconds, read 4 times a second - frame time shows the worst frame of each moment, so stutters stand out) or *1 minute*. Real time is the default.
 - **Smooth motion:** the lines glide continuously instead of jumping once a second (or choose *Power saver*: one step per reading). Measured on the author's laptop: at most 0.3 px off a steady speed per frame.
 - **Real numbers:** checked against nvidia-smi and Windows performance counters - GPU temperature within 0.3 °C, GPU usage 0.25 %, GPU power 0.04 W, CPU usage under load 1.4 %, RAM 0.14 % (average differences). The small min / max numbers are the real lowest and highest readings.
 - **Look:** *Gaming HUD* (corner brackets, glowing lines) or *Clean*; 7 color themes (*Neon, Toxic, Crimson, Violet, Ice, Gold, Mono*); small / medium / large; column, row or grid; background opacity from 0 to 100 %.
@@ -85,8 +87,8 @@ Not measured yet: the effect on FPS inside real games (please report what you se
 
 ## The window
 
-- **Home:** CPU / GPU / RAM / Storage cards with status words, a real-time chart (1 min / 5 min / 1 hr / 24 hr), network, and a live overlay preview.
-- **Graphs** and **Hardware:** live charts and detailed CPU, GPU, memory, storage, network and system information.
+- **Home:** CPU / GPU / RAM / Storage cards with status words, a performance chart (real time or 1 minute), network, switches for the overlay and the graph overlay, and a *Right now* box: the game in front, its frame rate, the session recorder, your last session and the safe-mode state.
+- **Graphs** and **Hardware:** live charts (real time or 1 minute; click one to enlarge it and put other lines on the same chart) and detailed CPU, GPU, memory, storage, network and system information.
 - **Overlay:** every overlay setting above, with a live preview.
 - **Graph overlay:** the settings of the graph overlay, with a live preview that uses your real numbers.
 - **Sessions:** every game is recorded automatically (a program drawing frames in front, seen by PresentMon; browsers and players are ignored; sessions under 1 minute are dropped). Each session stores average FPS, 1% / 0.1% lows from real frame times, load, temperatures and clocks. Findings only appear when the sensors prove them; a missing sensor is shown as *Unknown*, never as "fine". Data stays in `%APPDATA%\Lmonitor\sessions.db` and can be switched off.
