@@ -42,7 +42,7 @@ chk("second overlay has its own settings", all(("hud2_" + k[4:]) in Settings.DEF
 chk("second overlay is off by default, in another corner", cfg["hud2_on"] is False and cfg["hud2_pos"] != cfg["hud_pos"])
 c = Settings._clean(dict(deepcopy(cfg), hud2_items=["x", "fps", "fps"], hud2_size="xl", hud2_window=7, hud2_x=5))
 chk("second overlay's settings are checked like the first", c["hud2_items"] == ["fps"] and c["hud2_size"] == "m"
-    and c["hud2_window"] == 60 and c["hud2_x"] is None)
+    and c["hud2_window"] == 0 and c["hud2_x"] is None)
 src = read("lmonitor", "engine.py")
 chk("second overlay is loaded from settings.json", 'k.startswith("hud2_")' in src)
 b.settings.data = Settings._clean(dict(deepcopy(cfg), hud_on=True, hud2_on=True, hud_window=60, hud2_window=0,

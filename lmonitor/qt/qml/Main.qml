@@ -49,7 +49,10 @@ Window {
     function goTo(name) {
         for (var i = 0; i < pages.length; ++i) if (pages[i].label === name) { page = i; return }
     }
-    onPageChanged: tools.setPage(pages[page].tool || "")
+    onPageChanged: {
+        tools.setPage(pages[page].tool || "")
+        if (pages[page].live !== true) backend.setGraphFast(false)   // no real-time chart on this page
+    }
 
     // Nothing is prepared or animated while the window is hidden or minimized,
     // and the per-frame clock only runs on a page with moving charts.

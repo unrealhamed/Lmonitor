@@ -22,7 +22,7 @@ chk("Backend builds without any window", b.settings is not None and b.telemetry 
 chk("before the first sample the dashboard says not ready", b.dashboard() == {"ready": False})
 b.sample()
 d = b.dashboard()
-chk("after a sample: cards, network, status, perf are there", d["ready"] and set(d["cards"]) == {"cpu", "gpu", "ram", "disk"} and "perf" in d and "status" in d)
+chk("after a sample: cards, network, status, now are there", d["ready"] and set(d["cards"]) == {"cpu", "gpu", "ram", "disk"} and "now" in d and "status" in d)
 json.dumps(d, default=float)
 chk("dashboard data is plain (JSON friendly)", True)
 for k in ("cpu", "gpu", "ram"):
@@ -32,7 +32,7 @@ b.telemetry.snap["c_temp"] = None; b.telemetry.snap["c_use"] = None
 d = b.dashboard()
 chk("missing CPU data -> None + status none, no invented value", d["cards"]["cpu"]["use"] is None and d["cards"]["cpu"]["status"] == "none" and d["status"]["cpu_sensor"] is False)
 chk("card status rules", m.CardStatus.heat(50, 85, 80) == "hot" and m.CardStatus.heat(95, 40, 80) == "high" and m.CardStatus.heat(50, 72, 80) == "warm" and m.CardStatus.ram(85) == "warm" and m.CardStatus.disk(5) == "full" and m.CardStatus.disk(15) == "low" and m.CardStatus.disk(50) == "ok")
-chk("every perf range returns 3 series", all(len(b.perf(i)) == 3 for i in range(4)))
+chk("both chart spans (real time, 1 minute) give CPU / RAM / GPU lines", all(all(k in b.graph_series(sec) for k in ("c_use", "r_use", "g_use")) for sec in (0, 60)))
 # ---- overlay data + settings through the backend
 m.WinApi.setup()
 b.settings.reset(); b.sample()

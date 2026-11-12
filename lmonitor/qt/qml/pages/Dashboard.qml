@@ -3,8 +3,8 @@ import QtQuick.Window
 import Lmonitor
 import "../components"
 
-// Home: welcome card, four hardware cards, network, performance chart and the
-// overlay controls. Every number comes from backend.dashboard (real readings);
+// Home: welcome card, four hardware cards, network, performance chart and what is
+// going on right now (game, frame rate, session). Every number comes from backend.dashboard (real readings);
 // missing data shows "--" or "No data".
 Item {
     id: page
@@ -18,6 +18,18 @@ Item {
     readonly property var st: ready && d.status ? d.status : ({})
     readonly property var s: backend.settings
     readonly property int g: Tokens.gap
+    readonly property var now: ready && d.now ? d.now : ({})
+    readonly property var safe: ready && d.safe ? d.safe : ({active: false})
+
+    // the chart: real time (4 readings a second) or 1 minute
+    readonly property var spans: [0, 60]
+    property var pd: backend.graphs(spans[backend.rangeIndex])
+    function refreshChart() { pd = backend.graphs(spans[backend.rangeIndex]) }
+    Connections { target: backend
+                  function onDashboardChanged() { if (backend.rangeIndex !== 0) page.refreshChart() }
+                  function onHudChanged() { if (backend.rangeIndex === 0) page.refreshChart() }
+                  function onRangeChanged() { backend.setGraphFast(backend.rangeIndex === 0); page.refreshChart() } }
+    Component.onCompleted: backend.setGraphFast(backend.rangeIndex === 0)
 
     function ghz(mhz) { return mhz ? (mhz / 1000).toFixed(1) + Tr.t(" GHz") : "" }
     function go(name) { Window.window.goTo(name) }
@@ -52,6 +64,16 @@ Item {
                            anchors.verticalCenter: parent.verticalCenter
                            checked: page.s.on
                            onToggled: function (v) { backend.setSetting("on", v) } }
+        }
+        Rectangle {
+            width: gl.width + 86; height: 42; radius: 12
+            color: Tokens.fg(0.05); border.width: 1; border.color: Tokens.line
+            Text { id: gl; x: 16; anchors.verticalCenter: parent.verticalCenter; text: Tr.t("Graph overlay")
+                   color: Tokens.text; font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: true }
+            ToggleSwitch { anchors.right: parent.right; anchors.rightMargin: 10
+                           anchors.verticalCenter: parent.verticalCenter
+                           checked: (backend.hudStyles[0] || ({})).hud_on === true
+                           onToggled: function (v) { backend.setHudSetting(0, "hud_on", v) } }
         }
     }
 
@@ -150,11 +172,11 @@ Item {
         }
     }
 
-    // ---- chart + overlay controls
+    // ---- chart + what is going on right now
     PerfChart {
         x: 0; y: page.bodyY + page.rowA + page.g
         width: Math.round(page.width * 0.58) - page.g / 2; height: page.rowB
-        series: page.ready ? page.d.perf : [[], [], []]
+        d: page.pd; nowMs: Clock.now
         rangeIndex: backend.rangeIndex
         rangeNames: backend.rangeNames
         onRangePicked: function (i) { backend.setRange(i) }
@@ -162,30 +184,45 @@ Item {
     Card {
         x: Math.round(page.width * 0.58) + page.g / 2; y: page.bodyY + page.rowA + page.g
         width: page.width - x; height: page.rowB
-        Text { x: 20; y: 16; text: Tr.t("Overlay"); color: Tokens.text
+        Text { x: 20; y: 16; text: Tr.t("Right now"); color: Tokens.text
                font.family: Tokens.font; font.pixelSize: 18; font.bold: true }
         FitBar { x: 16; y: 50; width: parent.width - 32; height: 54
                  model: backend.overlay.groups.length > 0 ? backend.overlay : backend.preview
                  style: backend.settings }
         Column {
-            x: 20; y: 120; width: parent.width - 40; spacing: 12
+            x: 20; y: 118; width: parent.width - 40; spacing: 9
             Repeater {
                 model: [
-                    {t: Tr.t("Show the overlay in games"), k: "on", on: page.s.on, yes: true, no: false},
-                    {t: Tr.t("Show only when I press F9"), k: "show_mode", on: page.s.show_mode === "hotkey", yes: "hotkey", no: "always"},
-                    {t: Tr.t("Liquid glass look"), k: "look", on: page.s.look === "glass", yes: "glass", no: "dark"}
+                    {t: "Game", on: !!page.now.game,
+                     v: page.now.game ? page.now.game.name : Tr.t("No game in front")},
+                    {t: "Frame rate", on: !!page.now.game,
+                     v: page.now.game ? Tr.line(page.now.game.fps + " FPS  ·  " + Tr.t("avg ") + page.now.game.avg
+                                                + (page.now.game.low ? "  ·  1% low " + page.now.game.low : "")) : "--"},
+                    {t: "Session", on: page.now.recording === true,
+                     v: page.now.recording ? Tr.t("Recording") : Tr.t(page.now.session || "")},
+                    {t: "Last session", on: false,
+                     v: page.now.last ? Tr.line(page.now.last.game + (page.now.last.avg_fps ? "  ·  " + Math.round(page.now.last.avg_fps) + " FPS" : "")
+                                                + "  ·  " + page.now.last.when) : Tr.t("none yet")},
+                    {t: "Anti-cheat safe mode", on: page.safe.active === true,
+                     v: page.safe.active ? Tr.line(Tr.t("Active now") + (page.safe.game ? "  ·  " + page.safe.game : "")) : Tr.t("Not active now")}
                 ]
                 Item {
-                    width: parent.width; height: 28
-                    Text { anchors.verticalCenter: parent.verticalCenter; text: modelData.t || ""; color: Tokens.text
+                    width: parent.width; height: 22
+                    Rectangle { y: 7; width: 8; height: 8; radius: 4; color: modelData.on ? Tokens.accent : Tokens.dim }
+                    Text { x: 18; anchors.verticalCenter: parent.verticalCenter; text: Tr.t(modelData.t); color: Tokens.sub
                            font.family: Tokens.font; font.pixelSize: Tokens.fsBody }
-                    ToggleSwitch { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                                   checked: modelData.on
-                                   onToggled: function (v) { backend.setSetting(modelData.k, v ? modelData.yes : modelData.no) } }
+                    Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                           width: parent.width - 170; horizontalAlignment: Text.AlignRight; elide: Text.ElideRight
+                           text: modelData.v || ""; color: modelData.on ? Tokens.text : Tokens.sub
+                           font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: modelData.on }
                 }
             }
         }
-        Pill { x: 20; y: parent.height - 56; width: parent.width - 40; label: Tr.t("All overlay settings  ›")
-               onClicked: page.go("Overlay") }
+        Row {
+            x: 20; y: parent.height - 56; spacing: 10
+            Pill { label: Tr.t("Sessions"); onClicked: page.go("Sessions") }
+            Pill { label: Tr.t("Overlay"); onClicked: page.go("Overlay") }
+            Pill { label: Tr.t("Graph overlay"); onClicked: page.go("Graph overlay") }
+        }
     }
 }

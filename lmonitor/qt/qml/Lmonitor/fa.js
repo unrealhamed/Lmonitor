@@ -254,7 +254,10 @@ var strings = {
     "A new version is available: ": "نسخهٔ جدید آماده است: ", "Install now": "همین حالا نصب کن", "Later": "بعداً",
     "Start with Windows": "اجرا با شروع ویندوز", "Could not change it: ": "تغییر انجام نشد: ",
     "Lmonitor starts by itself when you sign in to Windows and waits in the tray next to the clock, with the overlays ready. No question from Windows each time.": "Lmonitor با ورود به ویندوز خودش اجرا می‌شود و کنار ساعت (tray) منتظر می‌ماند؛ اورلی‌ها هم آماده‌اند. ویندوز هم هر بار سؤال نمی‌پرسد.",
-    "Needs administrator rights (start Lmonitor normally, then try again)": "دسترسی ادمین لازم است (Lmonitor را عادی باز کن و دوباره امتحان کن)"
+    "Needs administrator rights (start Lmonitor normally, then try again)": "دسترسی ادمین لازم است (Lmonitor را عادی باز کن و دوباره امتحان کن)",
+    // ---- 1.17.7
+    "Right now": "همین حالا", "Game": "بازی", "Frame rate": "نرخ فریم", "Session": "جلسه", "Last session": "آخرین جلسه",
+    "No game in front": "بازی‌ای جلوی صفحه نیست", "Recording": "در حال ضبط", "avg ": "میانگین "
 };
 
 // Texts with numbers made by the engine: [pattern, Persian]. The Persian is a text with

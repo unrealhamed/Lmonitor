@@ -14,7 +14,7 @@ Item {
     readonly property real colW: (width - g) / 2
     readonly property var items: h.hud_items || []
     readonly property var posKeys: ["tl", "tr", "bl", "br"]
-    readonly property var windows: [0, 30, 60, 120, 300]
+    readonly property var windows: [0, 60]
 
     // the preview reads the same data as the overlay (the backend reads it while this
     // page is open)
@@ -159,7 +159,7 @@ Item {
                     Text { text: Tr.t("TIME SHOWN IN EACH CHART"); color: Tokens.sub
                            font.family: Tokens.font; font.pixelSize: Tokens.fsSmall; font.bold: true }
                     Segmented { width: parent.width
-                                model: ["Real time", "30 s", "1 min", "2 min", "5 min"]
+                                model: ["Real time", "1 min"]
                                 index: page.windows.indexOf(page.h.hud_window)
                                 onPicked: function (i) { backend.setHudSetting(page.n, "hud_window", page.windows[i]) } }
                     Text { width: parent.width; wrapMode: Text.WordWrap; color: Tokens.dim

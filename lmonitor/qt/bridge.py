@@ -65,6 +65,7 @@ class Bridge(QObject):
         self.hud_hosts = []                      # HudHost x2: the graph overlays (set by app.py)
         self._hud = [dict(self.HUD_EMPTY), dict(self.HUD_EMPTY)]
         self._hud_page = False                   # the Graph overlay page is open (preview)
+        self._graph_fast = False                 # a page shows real-time charts
         self.tools = Tools(backend, self, self)
         self._stop = threading.Event()
         self._wake = threading.Event()
@@ -231,7 +232,8 @@ class Bridge(QObject):
                     self._last_texts = texts
                     self._overlay_sampled.emit(b.overlay_view(texts))
                     wait = 0.5 if fps_in_bar else max(0.5, float(b.settings["refresh"]))
-                if hud or self._hud_page:
+                b.graph_fast = self._graph_fast and self._ui_visible and not self._covered
+                if hud or self._hud_page or b.graph_fast:
                     # the graph overlay (or its settings page): new data once per reading -
                     # once a second, or 4x a second in real time
                     if b.hud_tick():
@@ -418,13 +420,15 @@ class Bridge(QObject):
 
     @Slot(int)
     def setRange(self, i):
+        """Time span of the Home chart: 0 = real time, 1 = 1 minute."""
         if 0 <= i < len(RANGES) and i != self._range:
             self._range = i
             self.rangeChanged.emit()
-            if self._d.get("ready"):           # cheap: reads history only
-                d = dict(self._d)
-                d["perf"] = self._b.perf(i)
-                self._on_sampled(d)
+
+    @Slot(bool)
+    def setGraphFast(self, on):
+        """A page shows real-time charts (4 readings a second while it is visible)."""
+        self._graph_fast = bool(on)
 
     # ---- performance charts
     @Slot(int, result="QVariantMap")

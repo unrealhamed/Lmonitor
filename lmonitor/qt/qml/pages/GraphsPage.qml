@@ -2,16 +2,17 @@ import QtQuick
 import Lmonitor
 import "../components"
 
-// CPU / GPU temperature and usage, and fan speed, for the last 1 / 5 / 10 minutes.
+// CPU / GPU temperature and usage, network and fan speed: real time (last 10 s) or 1 minute.
 // Click a chart to enlarge it; in the large view the chips add or remove other lines on the
 // same chart. Fan speeds are read only while this page is open, so the fan graph starts
 // when you open the page. A sensor that reports nothing shows "No sensor data".
 Item {
     id: page
-    property int range: 1
-    readonly property var secs: [60, 300, 600]
-    readonly property var names: ["1 min", Tr.t("5 min"), Tr.t("10 min")]
-    readonly property real slotMs: secs[range] * 1000 / 60
+    property int range: 0                               // real time first
+    readonly property var secs: [0, 60]
+    readonly property var names: [Tr.t("Real time"), Tr.t("1 min")]
+    readonly property real slotMs: d.slot_ms || 1000
+    readonly property int points: d.points || 60
     property var d: backend.graphs(secs[range])
     readonly property real nowMs: Clock.now
     readonly property int g: Tokens.gap
@@ -56,8 +57,11 @@ Item {
         return Math.round(v) + (m.unit === "%" ? "%" : " " + m.unit)
     }
     function refresh() { d = backend.graphs(secs[range]) }
-    Connections { target: backend; function onDashboardChanged() { page.refresh() } }
-    Component.onCompleted: backend.setGraphsOpen(true)
+    Connections { target: backend
+                  function onDashboardChanged() { if (page.range !== 0) page.refresh() }
+                  function onHudChanged() { if (page.range === 0) page.refresh() } }   // 4 a second
+    onRangeChanged: backend.setGraphFast(range === 0)
+    Component.onCompleted: { backend.setGraphsOpen(true); backend.setGraphFast(range === 0) }
     Component.onDestruction: backend.setGraphsOpen(false)
 
     // ---- large view: the lines on it, the first one clicked comes first
@@ -98,7 +102,7 @@ Item {
 
     PageHeader {
         id: head; width: parent.width; kicker: Tr.t("Live while this window is open"); title: Tr.t("Graphs")
-        Segmented { width: 240; model: page.names; index: page.range
+        Segmented { width: 220; model: page.names; index: page.range
                     onPicked: function (i) { page.range = i; page.refresh() } }
     }
 
@@ -120,7 +124,7 @@ Item {
                 Text { x: 20; y: 14; text: Tr.t(modelData.title); color: Tokens.sub
                        font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: true }
                 Text { anchors.right: parent.right; anchors.rightMargin: 20; y: 14; color: Tokens.dim
-                       text: tileMouse.containsMouse ? Tr.t("Click to enlarge") : Tr.line(Tr.t("last ") + page.names[page.range])
+                       text: tileMouse.containsMouse ? Tr.t("Click to enlarge") : page.names[page.range]
                        font.family: Tokens.font; font.pixelSize: Tokens.fsSmall }
                 Text { x: 20; y: 34; color: Tokens.text; font.family: Tokens.font; font.pixelSize: 28; font.bold: true
                        text: page.valueText(modelData) }
@@ -131,7 +135,7 @@ Item {
                     maxValue: modelData.unit === "net" ? page.netMax : 100
                     fmtKind: modelData.unit === "net" ? "net" : ""
                     unit: modelData.unit === "°C" ? "°" : modelData.unit === "%" ? "%" : ""
-                    slotMs: page.slotMs; scrollEnd: page.d.end_ms || 0; extra: page.d.extra || 0
+                    slotMs: page.slotMs; slots: page.points; scrollEnd: page.d.end_ms || 0; extra: page.d.extra || 0
                     delayMs: page.d.delay_ms || 0; nowMs: page.nowMs
                 }
                 Text { visible: tile.now === null; anchors.centerIn: parent; text: Tr.t("No sensor data"); color: Tokens.dim
@@ -164,7 +168,7 @@ Item {
                 visible: page.fanNames.length > 0
                 x: 16; y: 66; width: parent.width - 32; height: parent.height - 66 - 14
                 series: page.fanSeries; colors: page.fanColors; maxValue: page.fanMax; fill: page.fanNames.length === 1
-                slotMs: page.slotMs; scrollEnd: page.d.end_ms || 0; extra: page.d.extra || 0
+                slotMs: page.slotMs; slots: page.points; scrollEnd: page.d.end_ms || 0; extra: page.d.extra || 0
                 delayMs: page.d.delay_ms || 0; nowMs: page.nowMs
             }
             Text { visible: page.fanNames.length === 0; anchors.centerIn: parent; width: parent.width - 60
@@ -241,7 +245,7 @@ Item {
             unit: page.openUnit
             rightMax: page.sideKind !== "" ? page.maxOf(page.sideKind) : 0
             rightKind: page.sideKind
-            slotMs: page.slotMs; scrollEnd: page.d.end_ms || 0; extra: page.d.extra || 0
+            slotMs: page.slotMs; slots: page.points; scrollEnd: page.d.end_ms || 0; extra: page.d.extra || 0
             delayMs: page.d.delay_ms || 0; nowMs: page.nowMs
         }
     }

@@ -346,7 +346,7 @@ class Hud:
     SIZES = ("s", "m", "l")
     LAYOUTS = ("v", "h", "grid")
     STYLES = ("hud", "clean")
-    WINDOWS = (0, 30, 60, 120, 300)         # seconds of history in each chart; 0 = real time
+    WINDOWS = (0, 60)                       # time span of a chart: 0 = real time, or 1 minute
     REALTIME_SECONDS = 10                   # real time: the last 10 s, read 4 times a second
     REALTIME_PERIOD = 0.25
     MOTIONS = ("smooth", "saver")           # smooth scrolling / one step a second
@@ -440,7 +440,7 @@ class Settings:
                 "hud_on": False, "hud_items": ["fps", "ft", "g_temp", "c_temp"],
                 "hud_pos": "tr", "hud_x": None, "hud_y": None, "hud_monitor": "primary",
                 "hud_size": "m", "hud_layout": "v", "hud_style": "hud",
-                "hud_theme": "neon", "hud_alpha": 65, "hud_window": 60,
+                "hud_theme": "neon", "hud_alpha": 65, "hud_window": 0,
                 "hud_mode": "always", "hud_motion": "smooth",
                 # anti-cheat safe mode: auto / always / off (see class SafeMode)
                 "safe_mode": "auto",
@@ -570,7 +570,7 @@ class Settings:
                                           (P + "layout", Hud.LAYOUTS, "v"),
                                           (P + "style", Hud.STYLES, "hud"),
                                           (P + "theme", [t[0] for t in Hud.THEMES], "neon"),
-                                          (P + "window", Hud.WINDOWS, 60),
+                                          (P + "window", Hud.WINDOWS, 0),
                                           (P + "mode", ("always", "hotkey"), "always"),
                                           (P + "motion", Hud.MOTIONS, "smooth")):
                 if cfg[key] not in allowed or isinstance(cfg[key], bool):
@@ -1697,7 +1697,7 @@ class Diagnostics:
 class AppInfo:
     """Name / version shown in the Hardware > System tab."""
     NAME = "Lmonitor"
-    VERSION = "1.17.6"
+    VERSION = "1.17.7"
     PUBLISHER = ""      # put your name or company here (empty = "Not set")
     URL = "https://github.com/unrealhamed/Lmonitor"
 

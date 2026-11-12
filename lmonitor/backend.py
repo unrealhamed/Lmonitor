@@ -23,7 +23,7 @@ HW_TABS = (("CPU / GPU", "rows_processor"), ("Memory", "rows_memory"),
            ("Storage", "rows_storage"), ("Network", "rows_network"),
            ("Sensors", "rows_sensors"), ("System", "rows_system"))
 HIST = 62            # samples for a sparkline: 60 shown + the ones sliding in and out
-RANGES = (("1 min", 60), ("5 min", 300), ("1 hr", 3600), ("24 hr", 86400))
+RANGES = (("Real time", 0), ("1 min", 60))     # time spans of every chart in the window
 
 
 class Backend:
@@ -92,15 +92,26 @@ class Backend:
         self.graphs.add(self.telemetry.snap, fans, time.time())
 
     def graph_series(self, seconds):
-        """60 visible slots plus some kept outside the chart, so a new point is already
-        drawn before it scrolls into view. Anchored on the newest reading, so the last
-        slot always holds a value."""
-        width = seconds / 60
-        late = self.telemetry.interval * 1.2         # how long a reading may take to arrive
+        """Lines for the charts of the window. seconds = 0: real time (the last 10 s, from
+        the 4-a-second readings); else that many seconds in 60 slots.
+        Some slots are kept outside the chart, so a new point is already drawn before it
+        scrolls into view. Anchored on the newest reading, so the last slot holds a value."""
+        if not seconds:
+            n, span, period, hist = 40, Hud.REALTIME_SECONDS, Hud.REALTIME_PERIOD, self.hud_hist
+            gap = max(4 * period, 1.5)
+        else:
+            n, span, period, hist = 60, seconds, self.telemetry.interval, self.graphs
+            gap = max(GraphHistory.MAX_GAP, self.telemetry.interval * 2.2)
+        width = span / n
+        late = period * 1.2                          # how long a reading may take to arrive
         extra = math.ceil(late / width) + 3
-        s = self.graphs.series(width * (60 + extra), 60 + extra, self.graphs.latest() or time.time(),
-                               max(GraphHistory.MAX_GAP, self.telemetry.interval * 2.2))
+        latest = hist.latest() or time.time()
+        s = hist.series(width * (n + extra), n + extra, latest, gap)
+        if hist is not self.graphs:                  # fan speeds are read once a second
+            s["fans"] = self.graphs.series(width * (n + extra), n + extra, latest,
+                                           max(GraphHistory.MAX_GAP, self.telemetry.interval * 2.2))["fans"]
         s["extra"], s["delay_ms"] = extra, (width + late) * 1000.0
+        s["points"], s["slot_ms"] = n, width * 1000.0
         return s
 
     # ---- read side (cheap, no hardware access)
@@ -157,9 +168,42 @@ class Backend:
                        "cpu_sensor": t is not None, "gpu_sensor": gt is not None,
                        "fps": "ready" if fps.alive else (
                            "missing" if "not found" in (fps.status or "") else "idle")},
-            "perf": self.perf(range_index),
             "safe": {"active": self.safe_active, "game": self.safe_game},
+            "now": self.now_box(),
         }
+
+    _last_sess, _last_sess_t = None, 0.0
+
+    def now_box(self):
+        """What is going on right now, for the Home page: the game in front and its frame
+        rate, the session recorder, the last saved session. Real values or None."""
+        game = None
+        try:
+            if self.fps.alive:
+                cur, snap = self.fps.current(), self.fps.snapshot(False)
+                if cur and snap:
+                    game = {"name": cur[1], "fps": round(snap[0]), "avg": round(snap[1]),
+                            "low": round(snap[2]) if snap[2] else None}
+        except Exception:
+            Logger.error("now box fps")
+        text, rec = "", False
+        try:
+            text, rec = self.sessions.status()
+        except Exception:
+            Logger.error("now box session")
+        now = time.monotonic()
+        if now - self._last_sess_t > 15 or not self._last_sess_t:      # the database: not every second
+            self._last_sess_t = now
+            self._last_sess = None
+            try:
+                for it in self.session_store.list():
+                    if not it["summary"].get("live"):
+                        self._last_sess = {"game": it["game"], "when": self._when(it["start"]),
+                                           "avg_fps": it["summary"].get("avg_fps")}
+                        break
+            except Exception:
+                Logger.error("now box last session")
+        return {"game": game, "session": text, "recording": bool(rec), "last": self._last_sess}
 
     def _cpu_note(self, temp):
         """Why the CPU temperature is missing (real reason), else ""."""
@@ -214,16 +258,6 @@ class Backend:
             cols[i].append(sec)
             heights[i] += len(sec["rows"]) + 2
         return cols
-
-    def perf(self, range_index):
-        """[cpu, ram, gpu] series for the big chart (oldest first)."""
-        sec = RANGES[range_index][1]
-        if range_index == 0:
-            # two more than shown: the oldest point must still exist while it slides out
-            n = max(8, int(sec / self.telemetry.interval)) + 2
-            return [list(self.telemetry.history[k])[-n:]
-                    for k in ("c_use", "r_use", "g_use")]
-        return self.recorder.series(sec)
 
     # ---- hardware page
     def hardware(self, tab):
@@ -393,7 +427,8 @@ class Backend:
     HUD_POINTS = 60                       # points per chart (the frame-time chart: 2x)
     HUD_FLOOR = {"fps": 60, "ft": 20, "g_pow": 40, "c_pow": 30}   # smallest scale top
 
-    HUD_KEYS = ("fps", "ft", "g_temp", "c_temp", "g_use", "c_use", "r_use", "g_pow", "c_pow")
+    HUD_KEYS = ("fps", "ft", "g_temp", "c_temp", "g_use", "c_use", "r_use", "g_pow", "c_pow",
+                "net_down", "net_up")
     HUD_FAST = {"g_use": True, "g_temp": True, "g_pow": True, "g_clk": False, "g_mem": False}
 
     hud_page_open = False               # the settings page shows a live preview
@@ -406,8 +441,11 @@ class Backend:
     def hud_wants_fps(self):
         return any(k in ("fps", "ft") for p in self._hud_active() for k in self.settings[p + "items"])
 
+    graph_fast = False                  # a page of the window shows real-time charts
+
     def hud_realtime(self):
-        return any(self.settings[p + "window"] == 0 for p in self._hud_active())
+        """Are fast readings (4 a second) needed now?"""
+        return self.graph_fast or any(self.settings[p + "window"] == 0 for p in self._hud_active())
 
     def hud_period(self):
         """Seconds between two graph-overlay readings."""
@@ -424,7 +462,8 @@ class Backend:
             return False
         since, self._hud_t = self._hud_t or now - period, now
         live = self.telemetry.snap or {}
-        vals = {k: live.get(k) for k in ("g_temp", "c_temp", "g_use", "c_use", "r_use", "g_pow", "c_pow")}
+        vals = {k: live.get(k) for k in ("g_temp", "c_temp", "g_use", "c_use", "r_use", "g_pow", "c_pow",
+                                          "net_down", "net_up")}
         if self.hud_realtime():
             try:
                 use, temp, pw, _clk, _mem = self.gpu.read(self.HUD_FAST, nvml_only=True)

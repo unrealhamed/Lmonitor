@@ -127,7 +127,7 @@ back.telemetry.interval = 1.0
 for k in ("c_use", "r_use", "g_use"):
     back.telemetry.history[k].clear()
     back.telemetry.history[k].extend(float(i) for i in range(100))
-chk("big chart: more points than shown, so the left edge never jumps", all(len(x) == 62 for x in back.perf(0)))
+chk("big chart: more points than shown, so the left edge never jumps", len(back.graph_series(60)["c_use"]) > 60)
 
 # ---- language
 import json
