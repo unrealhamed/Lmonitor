@@ -5,7 +5,7 @@ It puts a small click-through bar over your game (FPS, 1% lows, CPU / GPU / RAM 
 
 [فارسی](README.fa.md) · [Download](https://github.com/unrealhamed/Lmonitor/releases) · [Report a bug](https://github.com/unrealhamed/Lmonitor/issues/new?template=bug_report.md) · [Request a feature](https://github.com/unrealhamed/Lmonitor/issues/new?template=feature_request.md)
 
-> **Status: early release (v1.18.0).** Tested by the author on one Windows 11 laptop (NVIDIA RTX 4070 Laptop GPU + Intel Core i7-12700H). Some sensors may show `n/a` on other hardware. Bug reports are welcome.
+> **Status: early release (v1.18.3).** Tested by the author on one Windows 11 laptop (NVIDIA RTX 4070 Laptop GPU + Intel Core i7-12700H). Some sensors may show `n/a` on other hardware. Bug reports are welcome.
 
 ## Screenshots
 
@@ -90,6 +90,7 @@ Not measured yet: the effect on FPS inside real games (please report what you se
 ## The window
 
 - **Home:** CPU / GPU / RAM / Storage cards with status words, a performance chart (real time or 1 minute), network, switches for the overlay and the graph overlay, and a *Right now* box: the game in front, its frame rate, the session recorder, your last session and the safe-mode state.
+- **Network usage** (click the *Network* card on Home): how much you downloaded and uploaded in the last 1, 15 or 30 days - a bar per day; click a day to see it hour by hour, click an hour to see which programs used how much. The numbers are Windows' own records (the same as Settings > Network > Data usage, kept 30 - 60 days, so days before Lmonitor was installed show too), read only while the page is open. Windows sometimes writes them hours late; for the time after its newest record Lmonitor shows its own count (*Measured by Lmonitor*, read once a minute from the network adapters - totals only). Only real adapters count, so traffic through a VPN is not counted twice.
 - **Graphs** and **Hardware:** live charts (real time or 1 minute; click one to enlarge it and put other lines on the same chart) and detailed CPU, GPU, memory, storage, network and system information.
 - **Overlay:** every overlay setting above, with a live preview.
 - **Graph overlay:** the settings of the graph overlay, with a live preview that uses your real numbers.

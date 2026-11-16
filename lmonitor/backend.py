@@ -17,7 +17,7 @@ from lmonitor.engine import (AppInfo, BackgroundReader, CardStatus, ChangeLog, C
                              DiagRunner, FpsMonitor, GpuReader, LibreHardwareHost,
                              Logger, MemoryReader, ReportBuilder,
                              ScanStore, SessionAnalyzer, Settings, Telemetry,
-                             Theme, WinApi, GameSettings, fmt_net, Profiles)
+                             Theme, WinApi, GameSettings, fmt_net, Profiles, NetUsage, NetMeter)
 
 HW_TABS = (("CPU / GPU", "rows_processor"), ("Memory", "rows_memory"),
            ("Storage", "rows_storage"), ("Network", "rows_network"),
@@ -57,6 +57,8 @@ class Backend:
         # graph overlay: its own short history (5 min at most, 4 readings/s in real time)
         self.hud_hist = GraphHistory(keys=self.HUD_KEYS, keep=330)
         self._hud_t, self._hud_live = 0.0, {}
+        self.net_meter = NetMeter()         # own count, once a minute (started by the UI)
+        self.net_usage = NetUsage(self.net_meter)   # Windows' records: read only when its view is open
 
     # ---- anti-cheat safe mode (see engine.SafeMode)
     safe_active, safe_game, _safe_t = False, "", 0.0
@@ -93,6 +95,11 @@ class Backend:
     def sample(self):
         """One telemetry reading (call from a worker thread, never the UI)."""
         self.telemetry.sample()
+        # the real-time charts read the graph-overlay history: while nothing fast runs (another
+        # page open, graph overlay off) it gets this once-a-second reading, so coming back to
+        # a real-time chart shows a line, not a hole
+        if not self.hud_realtime():
+            self.hud_tick()
         fans = ({n: v for _, _, st, n, v in self.telemetry.sensors.read() if st == "Fan"}
                 if self.graph_fans else None)
         self.graphs.add(self.telemetry.snap, fans, time.time())
@@ -104,7 +111,7 @@ class Backend:
         scrolls into view. Anchored on the newest reading, so the last slot holds a value."""
         if not seconds:
             n, span, period, hist = 40, Hud.REALTIME_SECONDS, Hud.REALTIME_PERIOD, self.hud_hist
-            gap = max(4 * period, 1.5)
+            gap = max(4 * period, 1.5, self.telemetry.interval * 1.6)   # see sample()
         else:
             n, span, period, hist = 60, seconds, self.telemetry.interval, self.graphs
             gap = max(GraphHistory.MAX_GAP, self.telemetry.interval * 2.2)
@@ -669,6 +676,65 @@ class Backend:
                 + SessionView.rows_apps(sm))
         return self.sections(rows)
 
+    # ================================================= network usage (Home > Network)
+    USAGE_RANGES = (1, 15, 30)
+    FA_DAYS = ("دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه", "شنبه", "یکشنبه")
+    FA_MONTHS = ("ژانویه", "فوریه", "مارس", "آوریل", "مه", "ژوئن", "ژوئیه", "اوت", "سپتامبر",
+                 "اکتبر", "نوامبر", "دسامبر")
+
+    def _date_text(self, t, short=False):
+        lt = time.localtime(t)
+        if self.settings["language"] == "fa":
+            if short:
+                return "%d %s" % (lt.tm_mday, self.FA_MONTHS[lt.tm_mon - 1])
+            return "%s %d %s %d" % (self.FA_DAYS[lt.tm_wday], lt.tm_mday, self.FA_MONTHS[lt.tm_mon - 1],
+                                    lt.tm_year)
+        return time.strftime("%d %b" if short else "%A %d %B %Y", lt).lstrip("0")
+
+    @staticmethod
+    def _size(n):
+        return "0 MB" if not n else fmt_size(n)
+
+    def net_usage_view(self, days=1, day=None, hour=-1):
+        """Everything the Network usage view shows, as plain data.
+        days: 1 / 15 / 30; day: start time of the chosen day (None = the newest);
+        hour: 0-23 to list the programs of one hour, -1 = the whole day."""
+        nu = self.net_usage
+        if days not in self.USAGE_RANGES:
+            days = 1
+        state = ("admin" if nu.error == "admin" else "loading" if nu.busy and not nu.loaded
+                 else "error" if nu.error and not nu.loaded else "ready" if nu.loaded else "idle")
+        out = {"state": state, "busy": nu.busy, "live": NetUsage.LIVE, "error": "" if nu.error == "admin" else nu.error,
+               "days": days, "hour": hour,
+               "updated": self._date_text(nu.newest, True) + time.strftime("  %H:%M", time.localtime(nu.newest))
+               if nu.newest else ""}
+        if not nu.loaded:
+            return out
+        ds = nu.days(days)
+        top = max([d["down"] + d["up"] for d in ds] or [0]) or 1
+        starts = [d["start"] for d in ds]
+        if day not in starts:
+            day = starts[-1]
+        total_d, total_u = sum(d["down"] for d in ds), sum(d["up"] for d in ds)
+        out.update(total=self._size(total_d + total_u), down=self._size(total_d), up=self._size(total_u),
+                   day=day, dayText=self._date_text(day),
+                   bars=[{"start": d["start"], "label": self._date_text(d["start"], True),
+                          "day": time.localtime(d["start"]).tm_mday,
+                          "down": d["down"] / top, "up": d["up"] / top,
+                          "text": self._size(d["down"] + d["up"]), "sel": d["start"] == day} for d in ds])
+        hours, progs = nu.day(day, None if hour < 0 else hour)
+        hmax = max([h["down"] + h["up"] for h in hours] or [0]) or 1
+        out["hours"] = [{"h": i, "down": h["down"] / hmax, "up": h["up"] / hmax,
+                         "text": self._size(h["down"] + h["up"]), "empty": not (h["down"] or h["up"])}
+                        for i, h in enumerate(hours)]
+        dd, du = sum(h["down"] for h in hours), sum(h["up"] for h in hours)
+        out.update(dayTotal=self._size(dd + du), dayDown=self._size(dd), dayUp=self._size(du))
+        pmax = max([p["down"] + p["up"] for p in progs] or [0]) or 1
+        out["apps"] = [{"name": p["name"], "total": self._size(p["down"] + p["up"]),
+                        "down": self._size(p["down"]), "up": self._size(p["up"]),
+                        "frac": (p["down"] + p["up"]) / pmax} for p in progs[:40]]
+        return out
+
     def close(self):
         """Stop what the engine started (readers, PresentMon, sensor library).
 
@@ -677,6 +743,10 @@ class Backend:
         still call it during shutdown: "'MethodObject' object is not callable" in
         error.log.) Closing it also lets go of the PawnIO driver cleanly."""
         BackgroundReader.stopped = True
+        try:
+            self.net_meter.stop()
+        except Exception:
+            Logger.error("network meter stop")
         try:
             self.fps.stop()
         except Exception:

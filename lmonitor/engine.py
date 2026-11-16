@@ -1610,10 +1610,11 @@ class FpsMonitor:
 
     class ProcData:
         __slots__ = ("recent", "graph", "total_ms", "count", "last", "low",
-                     "low_time", "name", "hist")
+                     "low_time", "name", "hist", "clock")
 
         def __init__(self):
-            self.recent = deque()  # (time, ms) of the last 60 seconds
+            self.recent = deque()  # (frame time, ms) of the last 60 seconds
+            self.clock = 0.0       # time of this program's newest frame (see _reader)
             self.graph = deque(maxlen=Theme.GRAPH_POINTS)
             self.total_ms = 0.0
             self.count = 0
@@ -1623,11 +1624,14 @@ class FpsMonitor:
             self.name = ""
             self.hist = [0] * 4001   # frame times in 0.25 ms steps (sessions)
 
+    LAG_KEEP = 3.0          # s of arrival delays looked at by lag()
+
     def __init__(self):
         self.lock = threading.Lock()
         self.procs = {}
         self.proc = None
         self.status = ""
+        self._lags = deque()   # (arrival time, how late the frame arrived)
         atexit.register(self.stop)
 
     # ---- process control
@@ -1712,7 +1716,19 @@ class FpsMonitor:
                     p = self.procs[pid] = self.ProcData()
                 p.name = parts[i_app].strip()
                 p.hist[min(4000, int(ms * 4))] += 1
-                p.recent.append((now, ms))
+                # PresentMon gets its frames from Windows' event tracing in batches, about
+                # once a second; the time a line arrives is not the time of the frame. The
+                # frame's own time = the previous frame's time + its frame time (exact), never
+                # later than its arrival. (With arrival times a quarter second could have "no
+                # frames": the graph overlay showed "--" and holes at a steady 143 FPS.)
+                t = p.clock + ms / 1000.0 if p.clock else now
+                if t > now or t < now - 5.0:          # first frame / after a pause: start again
+                    t = now
+                p.clock = t
+                self._lags.append((now, now - t))
+                while self._lags and self._lags[0][0] < now - self.LAG_KEEP:
+                    self._lags.popleft()
+                p.recent.append((t, ms))
                 p.graph.append(ms)
                 p.total_ms += ms
                 p.count += 1
@@ -1739,10 +1755,24 @@ class FpsMonitor:
             p = self.procs.get(pid)
             return p is not None and time.time() - p.last <= within
 
+    def lag(self):
+        """How late frames arrive from PresentMon now (s): the longest delay of the last
+        few seconds. Numbers are measured up to `now - lag()`, where every frame is in."""
+        lags = getattr(self, "_lags", None)
+        if not lags:
+            return 0.0
+        with self.lock:
+            cut = time.time() - self.LAG_KEEP
+            worst = max((d for a, d in lags if a >= cut), default=0.0)
+        return min(2.0, worst + 0.05) if worst > 0 else 0.0
+
     def recent_stats(self, since, fps_window=1.0):
         """Program in front: (FPS over the last `fps_window` s, worst frame time in ms since
-        `since`), or None when it draws no frames. Cheap: reads the kept frame list."""
+        `since`), or None when it draws no frames. Cheap: reads the kept frame list.
+        Measured on the frames' own clock, `lag()` back (see _reader)."""
         now = time.time()
+        lag = self.lag()
+        end, since = now - lag, since - lag
         pid = WinApi.foreground_pid()
         with self.lock:
             p = self.procs.get(pid)
@@ -1750,9 +1780,11 @@ class FpsMonitor:
                 return None
             cnt, total, worst = 0, 0.0, None
             for t, ms in reversed(p.recent):
-                if t < since and now - t > fps_window:
+                if t > end:
+                    continue
+                if t < since and end - t > fps_window:
                     break
-                if now - t <= fps_window:
+                if end - t <= fps_window:
                     cnt += 1
                     total += ms
                 if t >= since and (worst is None or ms > worst):
@@ -1790,6 +1822,7 @@ class FpsMonitor:
     def snapshot(self, want_graph):
         """-> (fps, average, 1% low, last frametime, graph list) or None."""
         now = time.time()
+        end = now - self.lag()               # the frames' own clock (see _reader)
         pid = WinApi.foreground_pid()
         times = None
         with self.lock:
@@ -1800,7 +1833,9 @@ class FpsMonitor:
                 return None
             cnt, total, last = 0, 0.0, 0.0
             for t, ms in reversed(p.recent):  # only the last second
-                if now - t > 1.0:
+                if t > end:
+                    continue
+                if end - t > 1.0:
                     break
                 if cnt == 0:
                     last = ms
@@ -1830,7 +1865,7 @@ class FpsMonitor:
 class AppInfo:
     """Name / version shown in the Hardware > System tab."""
     NAME = "Lmonitor"
-    VERSION = "1.18.0"
+    VERSION = "1.18.3"
     PUBLISHER = ""      # put your name or company here (empty = "Not set")
     URL = "https://github.com/unrealhamed/Lmonitor"
 
@@ -2181,6 +2216,425 @@ class NetworkReader:
         """[(name, link Mbit/s, down, up)] for interfaces that are up."""
         return [(n, sp, *self.speeds.get(n, (None, None)))
                 for n, (isup, sp) in sorted(self.info.items()) if isup]
+
+
+# =============================================================== Network usage history
+class _ColumnDef(ctypes.Structure):
+    _fields_ = [("cbStruct", ctypes.c_ulong), ("columnid", ctypes.c_ulong), ("coltyp", ctypes.c_ulong),
+                ("wCountry", ctypes.c_ushort), ("langid", ctypes.c_ushort), ("cp", ctypes.c_ushort),
+                ("wCollate", ctypes.c_ushort), ("cbMax", ctypes.c_ulong), ("grbit", ctypes.c_ulong)]
+
+
+class EseReader:
+    """Reads tables of an ESE database file (Windows' own database engine, esent.dll),
+    read-only. Used for a copy of Windows' usage database (see NetUsage)."""
+    _n = 0
+
+    def __init__(self, path, work_dir):
+        self.E = ctypes.WinDLL("esent.dll")
+        self.path, self.dir = path, work_dir.rstrip("\\") + "\\"
+        self.inst, self.ses, self.db = ctypes.c_size_t(), ctypes.c_size_t(), ctypes.c_uint32()
+        self._open = False
+
+    def _ck(self, rc, what):
+        if rc < 0:
+            raise OSError("%s failed (%d)" % (what, rc))
+        return rc
+
+    @staticmethod
+    def page_size(path):
+        """cbDbPage from the database header (offset 236), 4096 when unreadable."""
+        try:
+            with open(path, "rb") as f:
+                f.seek(236)
+                v = int.from_bytes(f.read(4), "little")
+            return v if v in (2048, 4096, 8192, 16384, 32768) else 4096
+        except OSError:
+            return 4096
+
+    def __enter__(self):
+        E, z = self.E, ctypes.c_size_t(0)
+        EseReader._n += 1
+        self._ck(E.JetCreateInstanceW(ctypes.byref(self.inst), "lmonitor-%d" % EseReader._n), "instance")
+        sp = lambda pid, num, text: self._ck(E.JetSetSystemParameterW(
+            ctypes.byref(self.inst), ctypes.c_size_t(0), ctypes.c_ulong(pid), ctypes.c_size_t(num), text),
+            "parameter %d" % pid)
+        for pid in (0, 1, 2):                         # system / temp / log folder: our work folder
+            sp(pid, 0, self.dir)
+        sp(34, 0, "Off")                              # no recovery logs: a read-only copy
+        sp(64, self.page_size(self.path), None)       # the file's page size
+        self._ck(E.JetInit(ctypes.byref(self.inst)), "init")
+        self._open = True
+        self._ck(E.JetBeginSessionW(self.inst, ctypes.byref(self.ses), None, None), "session")
+        self._ck(E.JetAttachDatabaseW(self.ses, self.path, ctypes.c_ulong(1)), "attach")   # read-only
+        self._ck(E.JetOpenDatabaseW(self.ses, self.path, None, ctypes.byref(self.db), ctypes.c_ulong(1)), "open")
+        return self
+
+    def __exit__(self, *exc):
+        E = self.E
+        try:
+            E.JetCloseDatabase(self.ses, self.db, 0)
+            E.JetDetachDatabaseW(self.ses, self.path)
+            E.JetEndSession(self.ses, 0)
+        finally:
+            if self._open:
+                E.JetTerm(self.inst)
+
+    def rows(self, table, columns):
+        """[{column: raw bytes or None}] of every row."""
+        E, t = self.E, ctypes.c_size_t()
+        self._ck(E.JetOpenTableW(self.ses, self.db, table, None, 0, ctypes.c_ulong(4), ctypes.byref(t)),
+                 "table " + table)
+        try:
+            ids = {}
+            for c in columns:
+                cd = _ColumnDef()
+                cd.cbStruct = ctypes.sizeof(cd)
+                self._ck(E.JetGetTableColumnInfoW(self.ses, t, c, ctypes.byref(cd), ctypes.sizeof(cd), 0),
+                         "column " + c)
+                ids[c] = cd.columnid
+            out, size = [], 65536
+            buf, got = ctypes.create_string_buffer(size), ctypes.c_ulong()
+            rc = E.JetMove(self.ses, t, ctypes.c_long(-2147483648), 0)      # first row
+            while rc >= 0:
+                row = {}
+                for c, cid in ids.items():
+                    r = E.JetRetrieveColumn(self.ses, t, cid, buf, size, ctypes.byref(got), 0, None)
+                    row[c] = buf.raw[:min(got.value, size)] if r >= 0 and r != 1004 else None  # 1004: null
+                out.append(row)
+                rc = E.JetMove(self.ses, t, ctypes.c_long(1), 0)
+            return out
+        finally:
+            E.JetCloseTable(self.ses, t)
+
+
+class NetMeter:
+    """Lmonitor's own count of the internet traffic, for the hours Windows has not written
+    to its usage records yet (Windows writes them about once an hour, sometimes hours late).
+
+    Once a minute it reads the byte counters of the real network adapters (one cheap call,
+    interface_table) and adds what came in / went out to a 5-minute slot. The slots are kept
+    for 62 days in %APPDATA%\\Lmonitor\\netmeter.db (written every 5 minutes and at exit).
+    Totals only: which program used it is known from Windows' records alone."""
+    SLOT = 300
+    EVERY = 60.0
+    KEEP = 62 * 86400
+
+    def __init__(self, path=None, read=None):
+        self.path = path or os.path.join(Paths.CFG_DIR, "netmeter.db")
+        self.read = read or interface_table
+        self._prev = None
+        self._pending = {}                  # slot start -> [down, up] not written yet
+        self._saved = time.time()
+        self._lock = threading.Lock()
+        self._stop = threading.Event()
+        self._thread = None
+
+    def _con(self):
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        con = sqlite3.connect(self.path, timeout=5)
+        con.execute("CREATE TABLE IF NOT EXISTS slots (t INTEGER PRIMARY KEY, down INTEGER, up INTEGER)")
+        return con
+
+    def tick(self, now=None):
+        """One reading: the bytes since the last one go to the slot of `now`."""
+        now = time.time() if now is None else now
+        try:
+            cur = {n: (i.recv, i.sent) for n, i in self.read().items() if i.hardware}
+        except Exception:
+            Logger.error("network meter")
+            return
+        down = up = 0
+        prev, self._prev = self._prev, cur
+        if prev is not None:
+            for n, (r, s_) in cur.items():
+                p = prev.get(n)
+                if p is None:
+                    continue                 # a new adapter: counted from the next reading
+                dr, ds = r - p[0], s_ - p[1]
+                if dr >= 0 and ds >= 0:      # a counter that started again is skipped once
+                    down += dr
+                    up += ds
+        if down or up:
+            slot = int(now // self.SLOT) * self.SLOT
+            with self._lock:
+                a = self._pending.setdefault(slot, [0, 0])
+                a[0] += down
+                a[1] += up
+        if now - self._saved >= self.SLOT:
+            self.flush(now)
+
+    def flush(self, now=None):
+        now = time.time() if now is None else now
+        with self._lock:
+            items, self._pending = list(self._pending.items()), {}
+        self._saved = now
+        try:
+            con = self._con()
+            try:
+                con.executemany("INSERT INTO slots (t, down, up) VALUES (?, ?, ?) ON CONFLICT(t) DO UPDATE "
+                                "SET down = down + excluded.down, up = up + excluded.up",
+                                [(t, d, u) for t, (d, u) in items])
+                con.execute("DELETE FROM slots WHERE t < ?", (int(now - self.KEEP),))
+                con.commit()
+            finally:
+                con.close()
+        except Exception:
+            Logger.error("network meter save")
+            with self._lock:                 # keep them for the next try
+                for t, (d, u) in items:
+                    a = self._pending.setdefault(t, [0, 0])
+                    a[0] += d
+                    a[1] += u
+
+    def slots(self, since=0.0):
+        """[(slot start, down, up)] from `since` on (saved + not yet saved)."""
+        out = {}
+        try:
+            con = self._con()
+            try:
+                for t, d, u in con.execute("SELECT t, down, up FROM slots WHERE t >= ?", (int(since),)):
+                    out[t] = [d, u]
+            finally:
+                con.close()
+        except Exception:
+            Logger.error("network meter read")
+        with self._lock:
+            for t, (d, u) in self._pending.items():
+                if t >= since:
+                    a = out.setdefault(t, [0, 0])
+                    a[0] += d
+                    a[1] += u
+        return sorted((t, d, u) for t, (d, u) in out.items())
+
+    def start(self):
+        if self._thread is not None:
+            return
+
+        def loop():
+            while not self._stop.is_set():
+                self.tick()
+                self._stop.wait(self.EVERY)
+        self._thread = threading.Thread(target=loop, name="network meter", daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        self._stop.set()
+        if self._thread is not None:
+            self.tick()
+            self.flush()
+
+
+class NetUsage:
+    """How much each program downloaded / uploaded, per hour, for the last weeks.
+
+    Windows itself records this (System Resource Usage Monitor, the source of Settings >
+    Network > Data usage) about once an hour, for 30 - 60 days, in
+    C:\\Windows\\System32\\sru\\SRUDB.dat. Lmonitor reads a copy of it only when the
+    Network usage view is opened: nothing runs while you play. Copying the open file needs
+    administrator rights and a moment of Windows' Volume Shadow Copy (a few seconds).
+
+    Only real network adapters are counted (Wi-Fi, Ethernet, USB tethering...). Traffic
+    through a VPN is counted once, on the real adapter, by the VPN program or by Windows
+    itself ("System") - that is what came off the internet connection."""
+    SRUM = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "sru", "SRUDB.dat")
+    TABLE = "{973F5D5C-1D90-4944-BE8E-24B94231A174}"          # Network Data Usage
+    VIRTUAL_TYPES = {24, 53, 131}           # loopback, virtual adapter (VPN), tunnel
+    MAX_AGE = 15 * 60                       # s: Windows writes once an hour; reread after this
+    SYSTEM = "System (Windows)"
+    LIVE = "Measured by Lmonitor"           # after Windows' newest record (see NetMeter)
+
+    def __init__(self, meter=None):
+        self.meter = meter
+        self.rows = []                      # (local hour start, app, down, up)
+        self.loaded = 0.0                   # when it was read (time.time)
+        self.newest = None                  # newest record of Windows (time.time)
+        self.error = ""
+        self.busy = False
+        self.version = 0
+        self._lock = threading.Lock()
+
+    # ---- names
+    @classmethod
+    def app_name(cls, blob, kind):
+        """'\\device\\harddiskvolume4\\...\\chrome.exe' -> 'chrome.exe'; a service stays its
+        name; '!!svchost.exe!2045/05/31...' -> 'svchost.exe'."""
+        if not blob:
+            return cls.SYSTEM
+        try:
+            text = blob.decode("utf-16-le", "replace").rstrip("\x00").strip()
+        except Exception:
+            return "?"
+        if not text:
+            return cls.SYSTEM
+        if text.startswith("!!"):
+            text = text[2:].split("!", 1)[0]
+        if "\\" in text:
+            return text.rsplit("\\", 1)[-1]
+        m = re.match(r"^([\w.\-]+?)_[\d.]+_\w*__\w+$", text)     # a Store app's package name
+        if m:
+            name = m.group(1)
+            return cls.PACKAGES.get(name, name.split(".")[-1] if name.startswith("Microsoft.") else name)
+        if text in cls.SERVICES:
+            return cls.SERVICES[text]
+        return text if kind == 0 else text + " (service)"
+
+    PACKAGES = {"Microsoft.WindowsStore": "Microsoft Store", "Microsoft.GamingApp": "Xbox",
+                "Microsoft.XboxGamingOverlay": "Xbox Game Bar"}
+    SERVICES = {"DoSvc": "Windows Update (Delivery Optimization)", "wuauserv": "Windows Update",
+                "BITS": "Background downloads (BITS)", "UsoSvc": "Windows Update (Orchestrator)",
+                "CryptSvc": "Certificates (CryptSvc)", "Dnscache": "DNS (Windows)"}
+
+    @classmethod
+    def is_virtual(cls, luid_raw):
+        """Interface type from the LUID (its top 16 bits)."""
+        if not luid_raw or len(luid_raw) < 8:
+            return False
+        return (int.from_bytes(luid_raw[:8], "little") >> 48) in cls.VIRTUAL_TYPES
+
+    @staticmethod
+    def ole_time(raw):
+        """OLE Automation date (days since 1899-12-30, UTC) -> time.time() seconds."""
+        import struct
+        days = struct.unpack("<d", raw)[0]
+        return (days - 25569.0) * 86400.0
+
+    @classmethod
+    def parse(cls, net_rows, id_rows):
+        """Raw rows of the two tables -> ([(local hour start, app, down, up)], newest)."""
+        import struct
+        names = {}
+        for r in id_rows:
+            try:
+                kind = r["IdType"][0] if r["IdType"] else -1
+                idx = struct.unpack("<i", r["IdIndex"])[0]
+            except Exception:
+                continue
+            if kind in (0, 1, 2):
+                names[idx] = cls.app_name(r["IdBlob"], kind)
+        agg, newest = {}, None
+        for r in net_rows:
+            try:
+                if cls.is_virtual(r["InterfaceLuid"]):
+                    continue
+                t = cls.ole_time(r["TimeStamp"])
+                app = names.get(struct.unpack("<i", r["AppId"])[0], "?")
+                up = struct.unpack("<q", r["BytesSent"])[0] if r["BytesSent"] else 0
+                down = struct.unpack("<q", r["BytesRecvd"])[0] if r["BytesRecvd"] else 0
+            except Exception:
+                continue
+            if down <= 0 and up <= 0:
+                continue
+            newest = t if newest is None else max(newest, t)
+            # a record covers about the hour before it was written
+            lt = time.localtime(t - 1800)
+            hour = time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, lt.tm_hour, 0, 0, 0, 0, -1))
+            k = (hour, app)
+            a = agg.get(k)
+            agg[k] = (down, up) if a is None else (a[0] + down, a[1] + up)
+        return [(h, app, d, u) for (h, app), (d, u) in agg.items()], newest
+
+    # ---- reading Windows' database
+    def _copy(self, folder):
+        dst = os.path.join(folder, "SRUDB.dat")
+        r = subprocess.run(["esentutl.exe", "/y", self.SRUM, "/vss", "/d", dst],
+                           capture_output=True, text=True, errors="replace", stdin=subprocess.DEVNULL,
+                           timeout=90, creationflags=0x08000000)
+        if r.returncode != 0 or not os.path.exists(dst):
+            out = (r.stdout + r.stderr).strip().splitlines()
+            raise OSError("Windows did not copy its usage database (%s)" % (out[-1] if out else r.returncode))
+        return dst
+
+    def _load(self):
+        import shutil, tempfile
+        folder = tempfile.mkdtemp(prefix="lmonitor_usage_")
+        try:
+            path = self._copy(folder)
+            with EseReader(path, folder) as db:
+                net = db.rows(self.TABLE, ["TimeStamp", "AppId", "InterfaceLuid", "BytesSent", "BytesRecvd"])
+                ids = db.rows("SruDbIdMapTable", ["IdType", "IdIndex", "IdBlob"])
+            rows, newest = self.parse(net, ids)
+            with self._lock:
+                self.rows, self.newest, self.loaded, self.error = rows, newest, time.time(), ""
+        finally:
+            shutil.rmtree(folder, ignore_errors=True)
+
+    def refresh(self, force=False):
+        """Read again on a worker thread when the data is older than MAX_AGE (or forced).
+        -> True when a read started."""
+        if self.busy or (not force and self.loaded and time.time() - self.loaded < self.MAX_AGE):
+            return False
+        if not WinApi.is_admin():
+            self.error = "admin"
+            self.version += 1
+            return False
+        self.busy = True
+        self.version += 1
+
+        def work():
+            try:
+                self._load()
+            except Exception as e:
+                Logger.error("network usage")
+                self.error = str(e)[:200] or type(e).__name__
+            finally:
+                self.busy = False
+                self.version += 1
+        threading.Thread(target=work, name="network usage", daemon=True).start()
+        return True
+
+    # ---- views (plain data)
+    def _all_rows(self):
+        """Windows' records + Lmonitor's own count for the time after Windows' newest record."""
+        with self._lock:
+            rows, since = list(self.rows), self.newest or 0.0
+        if self.meter is not None:
+            for t, down, up in self.meter.slots(since):
+                lt = time.localtime(t)
+                hour = time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, lt.tm_hour, 0, 0, 0, 0, -1))
+                rows.append((hour, self.LIVE, down, up))
+        return rows
+
+    @staticmethod
+    def day_start(t):
+        lt = time.localtime(t)
+        return time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, 0, 0, 0, 0, 0, -1))
+
+    def days(self, n, now=None):
+        """The last n days (today last): [{start, down, up}]."""
+        now = time.time() if now is None else now
+        starts, d = [], self.day_start(now)
+        for _ in range(n):
+            starts.append(d)
+            d = self.day_start(d - 43200)            # noon of the day before -> its start
+        starts.reverse()
+        idx = {s: i for i, s in enumerate(starts)}
+        out = [{"start": s, "down": 0, "up": 0} for s in starts]
+        for hour, _app, down, up in self._all_rows():
+            i = idx.get(self.day_start(hour))
+            if i is not None:
+                out[i]["down"] += down
+                out[i]["up"] += up
+        return out
+
+    def day(self, start, hour=None):
+        """One day: 24 hours [{down, up}] and the programs [{name, down, up}] (of the whole
+        day, or of one hour 0-23), biggest first."""
+        hours = [{"down": 0, "up": 0} for _ in range(24)]
+        apps = {}
+        for h, app, down, up in self._all_rows():
+            if self.day_start(h) != start:
+                continue
+            hh = time.localtime(h).tm_hour
+            hours[hh]["down"] += down
+            hours[hh]["up"] += up
+            if hour is None or hh == hour:
+                a = apps.setdefault(app, [0, 0])
+                a[0] += down
+                a[1] += up
+        progs = sorted(({"name": n, "down": d, "up": u} for n, (d, u) in apps.items()),
+                       key=lambda p: -(p["down"] + p["up"]))
+        return hours, progs
 
 
 # =============================================================== Battery

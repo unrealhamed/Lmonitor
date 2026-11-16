@@ -257,7 +257,24 @@ var strings = {
     "Needs administrator rights (start Lmonitor normally, then try again)": "دسترسی ادمین لازم است (Lmonitor را عادی باز کن و دوباره امتحان کن)",
     // ---- 1.17.7
     "Right now": "همین حالا", "Game": "بازی", "Frame rate": "نرخ فریم", "Session": "جلسه", "Last session": "آخرین جلسه",
-    "No game in front": "بازی‌ای جلوی صفحه نیست", "Recording": "در حال ضبط", "avg ": "میانگین "
+    "No game in front": "بازی‌ای جلوی صفحه نیست", "Recording": "در حال ضبط", "avg ": "میانگین ",
+    // ---- network usage (1.18.2)
+    "Network usage": "مصرف اینترنت", "From Windows' own records": "از سوابقی که خود ویندوز ثبت می‌کند",
+    "1 day": "۱ روز", "15 days": "۱۵ روز", "30 days": "۳۰ روز", "Refresh": "به‌روزرسانی", "Reading...": "در حال خواندن...",
+    "Back": "بازگشت", "Needs administrator rights": "دسترسی ادمین لازم است",
+    "Windows' records could not be read": "سوابق ویندوز خوانده نشد",
+    "Reading Windows' records...": "در حال خواندن سوابق ویندوز...",
+    "Windows keeps these records where only administrators can read them. Start Lmonitor normally (it asks for administrator rights).": "ویندوز این سوابق را جایی نگه می‌دارد که فقط ادمین می‌تواند بخواند. Lmonitor را عادی باز کن (دسترسی ادمین می‌خواهد).",
+    "This takes a few seconds. Windows writes these records about once an hour, for the last 30 to 60 days.": "چند ثانیه طول می‌کشد. ویندوز این سوابق را تقریباً ساعتی یک بار و برای ۳۰ تا ۶۰ روز گذشته ثبت می‌کند.",
+    "Newest record from Windows: ": "تازه‌ترین ثبت ویندوز: ",
+    "Only real adapters (Wi-Fi, Ethernet) are counted.": "فقط کارت‌های شبکهٔ واقعی (Wi-Fi، Ethernet) حساب می‌شوند.",
+    "Per day - click a day": "هر روز - روی یک روز کلیک کن", "Used: ": "مصرف: ",
+    "Per hour - click an hour to see its programs": "هر ساعت - روی یک ساعت کلیک کن تا برنامه‌هایش را ببینی",
+    "nothing": "هیچ", "Programs at ": "برنامه‌ها در ساعت ", "Programs - whole day": "برنامه‌ها - کل روز",
+    "\"System (Windows)\" is Windows itself, and traffic Windows carries for a VPN.": "«\u2066System (Windows)\u2069» خود ویندوز است، به‌اضافهٔ ترافیکی که ویندوز برای VPN جابه‌جا می‌کند.",
+    "Nothing was used in this time": "در این زمان مصرفی نبوده", "Click for usage history": "برای دیدن مصرف کلیک کن",
+    "After that: measured by Lmonitor (totals only).": "بعد از آن: اندازه‌گیری خود Lmonitor (فقط مجموع).",
+    "Measured by Lmonitor": "اندازه‌گیری Lmonitor (هنوز در سوابق ویندوز نیست)",
 };
 
 // Texts with numbers made by the engine: [pattern, Persian]. The Persian is a text with

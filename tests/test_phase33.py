@@ -32,7 +32,7 @@ eng, back = read("lmonitor", "engine.py"), read("lmonitor", "backend.py")
 bridge, ovl = read("lmonitor", "qt", "bridge.py"), read("lmonitor", "qt", "overlay.py")
 qml = lambda *p: read("lmonitor", "qt", "qml", *p)
 
-chk("version 1.18.0", E.AppInfo.VERSION == "1.18.0")
+chk("version 1.18 or newer", tuple(map(int, E.AppInfo.VERSION.split("."))) >= (1, 18, 0))
 
 # ---- 1. extra sensors: no lock after the first time
 h = E.LibreHardwareHost.__new__(E.LibreHardwareHost)

@@ -176,6 +176,13 @@ Item {
             maxValue: { var m = 1; var h = values || []; for (var i = 0; i < h.length; ++i) if (h[i] > m) m = h[i]; return m * 1.15 }
             color: Tokens.violet
         }
+        // click: how much was used (1 / 15 / 30 days, per hour and per program)
+        Text { x: 18; y: 40; text: Tr.t("Click for usage history"); color: netMouse.containsMouse ? Tokens.accent : Tokens.dim
+               font.family: Tokens.font; font.pixelSize: 10 }
+        Rectangle { anchors.fill: parent; radius: Tokens.radius; color: "transparent"
+                    border.width: 1; border.color: Tokens.accent; visible: netMouse.containsMouse }
+        MouseArea { id: netMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                    onClicked: page.go("Network usage") }
     }
 
     // ---- chart + what is going on right now

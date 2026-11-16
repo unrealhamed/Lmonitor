@@ -29,6 +29,7 @@ Window {
         {label: "Home", src: "pages/Dashboard.qml", live: true},
         {label: "Graphs", src: "pages/GraphsPage.qml", live: true},
         {label: "Hardware", src: "pages/HardwarePage.qml"},
+        {label: "Network usage", src: "pages/NetUsagePage.qml", hidden: true},   // from Home > Network
         {head: "GAMING"},
         {label: "Overlay", src: "pages/OverlayPage.qml"},
         {label: "Graph overlay", src: "pages/HudPage.qml"},
@@ -93,7 +94,8 @@ Window {
                 model: win.nav
                 Item {
                     readonly property int pageIndex: modelData.label === undefined ? -1 : win.indexOfLabel(modelData.label)
-                    width: parent.width; height: modelData.label === undefined ? (modelData.head === "" ? 8 : 24) : 36
+                    width: parent.width; height: modelData.hidden ? 0 : modelData.label === undefined ? (modelData.head === "" ? 8 : 24) : 36
+                    visible: !modelData.hidden
                     Text { visible: modelData.label === undefined && modelData.head !== ""
                            x: 12; anchors.bottom: parent.bottom; anchors.bottomMargin: 2
                            text: Tr.t(modelData.head); color: Tokens.dim

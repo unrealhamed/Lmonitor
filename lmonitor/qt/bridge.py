@@ -43,6 +43,7 @@ class Bridge(QObject):
     autostartChanged = Signal()
     _update_done = Signal(dict)
     _autostart_done = Signal(bool, str)
+    netUsageChanged = Signal()
 
     HUD_EMPTY = {"items": [], "accent": "#35d6ff", "window": 60}
     FALLBACK_FONTS = ("Consolas", "Cascadia Mono", "Courier New")
@@ -75,6 +76,11 @@ class Bridge(QObject):
         self._update_done.connect(self._on_update)
         self._covered_seen.connect(self._on_covered)
         self._hud_sampled.connect(self._on_hud)
+        self._nu = {"days": 1, "day": None, "hour": -1, "seen": -1}
+        self._nu_view = {"state": "idle"}
+        self._nu_timer = QTimer(self)
+        self._nu_timer.setInterval(400)
+        self._nu_timer.timeout.connect(self._nu_poll)
         self._autostart_done.connect(self._on_autostart)
         self._upd = {"state": "idle", "text": ""}
         self._info = None
@@ -91,6 +97,7 @@ class Bridge(QObject):
         for t in self._threads:
             t.start()
         self._autostart_job(None)
+        self._b.net_meter.start()               # Network usage: the hours Windows has not written yet
         self.checkUpdate()
         # ...and again every 3 hours while Lmonitor runs, so a release that comes out
         # later is noticed without pressing "Check for updates"
@@ -386,6 +393,57 @@ class Bridge(QObject):
             if k.startswith(p):
                 self._b.set_setting(k, v)
         self.settingsTouched()
+
+    # ---- network usage (Home > Network): Windows' own records, read when the view opens
+    @Property("QVariantMap", notify=netUsageChanged)
+    def netUsage(self):
+        return self._nu_view
+
+    def _nu_build(self):
+        n = self._nu
+        try:
+            self._nu_view = self._b.net_usage_view(n["days"], n["day"], n["hour"])
+        except Exception:
+            Logger.error("network usage view")
+            self._nu_view = {"state": "error", "error": "See error.log"}
+        n["seen"] = self._b.net_usage.version
+        self.netUsageChanged.emit()
+
+    def _nu_poll(self):
+        if self._b.net_usage.version != self._nu["seen"]:
+            self._nu_build()
+        if not self._b.net_usage.busy:
+            self._nu_timer.stop()
+
+    @Slot(bool)
+    def setNetUsageOpen(self, on):
+        if on:
+            self._b.net_usage.refresh()
+            self._nu_build()
+            self._nu_timer.start()
+        else:
+            self._nu_timer.stop()
+
+    @Slot()
+    def netUsageRefresh(self):
+        self._b.net_usage.refresh(force=True)
+        self._nu_build()
+        self._nu_timer.start()
+
+    @Slot(int)
+    def netUsageRange(self, days):
+        self._nu.update(days=days, day=None, hour=-1)
+        self._nu_build()
+
+    @Slot(float)
+    def netUsageDay(self, start):
+        self._nu.update(day=start, hour=-1)
+        self._nu_build()
+
+    @Slot(int)
+    def netUsageHour(self, hour):
+        self._nu["hour"] = -1 if hour == self._nu["hour"] else hour     # a second click: whole day
+        self._nu_build()
 
     # ---- window look (Personalize)
     @Property("QVariantList", constant=True)
