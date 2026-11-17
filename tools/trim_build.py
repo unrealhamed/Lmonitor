@@ -12,12 +12,13 @@ import sys
 
 KEEP_TOP = ("Qt6Core.dll", "Qt6Gui.dll", "Qt6Network.dll", "Qt6OpenGL.dll", "Qt6Qml.dll",
             "Qt6QmlMeta.dll", "Qt6QmlModels.dll", "Qt6QmlWorkerScript.dll", "Qt6Quick.dll",
+            "Qt6QuickEffects.dll",                       # blur behind the What's new box
             "Qt6Widgets.dll", "QtCore.pyd", "QtGui.pyd", "QtNetwork.pyd", "QtOpenGL.pyd",
             "QtQml.pyd", "QtQuick.pyd", "QtWidgets.pyd", "msvcp*.dll", "vcruntime*.dll", "concrt*.dll",
             "pyside6*.dll", "shiboken6*.dll", "*.py", "*.pyi", "*.json")
 KEEP_PLUGINS = ("platforms/qwindows.dll", "platforms/qoffscreen.dll", "styles/*", "imageformats/qico.dll")
 KEEP_QML = ("QtQml/*", "QtQuick/qmldir", "QtQuick/*.qmltypes", "QtQuick/qtquick2plugin.dll",
-            "QtQuick/Window/*", "*.qmltypes")
+            "QtQuick/Window/*", "QtQuick/Effects/*", "*.qmltypes")
 DROP_DIRS = ("translations", "resources", "typesystems", "include", "glue", "doc", "metatypes")
 
 

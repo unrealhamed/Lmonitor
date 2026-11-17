@@ -1,4 +1,4 @@
-﻿"""v1.18.1 - two bugs from the author's videos.
+"""v1.18.1 - two bugs from the author's videos.
 
 1. Graph overlay over a game at a steady 143 FPS: "Frame time" kept switching to "--",
    its line had holes, and FPS showed "--" for a moment. PresentMon gets its frames from
@@ -98,7 +98,7 @@ for _ in range(3):
     b.sample()
 chk("once-a-second readings fill the real-time history", len(b.hud_hist.data) - n0 >= 3)
 src = open(_os.path.join(ROOT, "lmonitor", "backend.py"), encoding="utf-8").read()
-chk("a slower Refresh (2 s) still joins the real-time line", "self.telemetry.interval * 1.6" in src)
+chk("a slower Refresh (2 s) still joins the real-time line", "self.telemetry.interval * 2.2" in src)
 chk("version 1.18.1 or newer", tuple(map(int, E.AppInfo.VERSION.split("."))) >= (1, 18, 1))
 
 print("\n%d passed, %d failed" % (ok, bad))

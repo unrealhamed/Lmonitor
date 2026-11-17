@@ -125,67 +125,28 @@ class Theme:
     VENDOR = NVIDIA
     LIGHT = False                        # True while a light app theme is used
 
-    # ---- app themes (the whole window): key, name, note, colors
-    UI_THEMES = (
-        ("default", "Default", "Neutral dark, accent follows your GPU",
-         {"C_BG": "#17171b", "C_SIDE": "#111114", "C_CARD": "#212126",
-          "C_TRACK": "#34343c", "SUB": "#9a9aa8", "TXT": "#f2f2f5",
-          "DIM": "#7c7c88", "light": False, "accent": None}),
-        ("night", "Night", "Deep blue-black, easy on the eyes",
-         {"C_BG": "#0b0e15", "C_SIDE": "#07090e", "C_CARD": "#121823",
-          "C_TRACK": "#232c3d", "SUB": "#8d97ad", "TXT": "#e9eef8",
-          "DIM": "#667188", "light": False, "accent": None}),
-        ("day", "Day", "Bright and clean for daylight",
-         {"C_BG": "#eceff4", "C_SIDE": "#dfe3ea", "C_CARD": "#ffffff",
-          "C_TRACK": "#d2d8e2", "SUB": "#586174", "TXT": "#151a24",
-          "DIM": "#7b8497", "light": True, "accent": None}),
-        ("aurora", "Aurora", "Violet dusk with a mint glow (my own design)",
-         {"C_BG": "#150f26", "C_SIDE": "#0f0a1d", "C_CARD": "#1f1737",
-          "C_TRACK": "#33295a", "SUB": "#aaa0cf", "TXT": "#f5f1ff",
-          "DIM": "#7f75a8", "light": False, "accent": "#2ee6c5"}),
-        ("carbon", "Carbon", "Pure black for OLED screens",
-         {"C_BG": "#000000", "C_SIDE": "#060607", "C_CARD": "#0e0e10",
-          "C_TRACK": "#222228", "SUB": "#9a9aa5", "TXT": "#f5f5f7",
-          "DIM": "#6a6a75", "light": False, "accent": None}),
-        ("crimson", "Crimson", "Dark red, made for late-night gaming",
-         {"C_BG": "#140a0c", "C_SIDE": "#0e0608", "C_CARD": "#1e1014",
-          "C_TRACK": "#3a1e26", "SUB": "#c9a3ab", "TXT": "#fff1f3",
-          "DIM": "#8f6b73", "light": False, "accent": "#ff4d6d"}),
-        ("ocean", "Ocean", "Deep sea blue with a cyan glow",
-         {"C_BG": "#07141a", "C_SIDE": "#050e13", "C_CARD": "#0d1f28",
-          "C_TRACK": "#1c3a48", "SUB": "#93b4c2", "TXT": "#eaf7fc",
-          "DIM": "#5f8494", "light": False, "accent": "#22d3ee"}),
-        ("sunset", "Sunset", "Warm brown and orange",
-         {"C_BG": "#1a0f0a", "C_SIDE": "#120a06", "C_CARD": "#261710",
-          "C_TRACK": "#45291b", "SUB": "#d1ac98", "TXT": "#fff4ec",
-          "DIM": "#96705c", "light": False, "accent": "#ff8a3d"}),
-        ("forest", "Forest", "Dark green, calm",
-         {"C_BG": "#0b1410", "C_SIDE": "#070e0b", "C_CARD": "#12201a",
-          "C_TRACK": "#223a2f", "SUB": "#9dbfae", "TXT": "#eefaf3",
-          "DIM": "#65887a", "light": False, "accent": "#4ade80"}),
-        ("paper", "Paper", "Warm light theme",
-         {"C_BG": "#f4efe6", "C_SIDE": "#e9e2d6", "C_CARD": "#fffdf8",
-          "C_TRACK": "#dcd3c3", "SUB": "#6b6254", "TXT": "#1f1a12",
-          "DIM": "#8d8473", "light": True, "accent": "#c2410c"}))
-    UI_ACCENTS = (("auto", "Auto", None), ("green", "Green", "#76b900"),
-                  ("blue", "Blue", "#4f8cff"), ("violet", "Violet", "#8b5cf6"),
-                  ("pink", "Pink", "#ec4899"), ("orange", "Orange", "#f97316"),
-                  ("teal", "Teal", "#14b8a6"), ("red", "Red", "#ef4444"),
-                  ("rose", "Rose", "#f43f5e"), ("gold", "Gold", "#f59e0b"),
-                  ("yellow", "Yellow", "#eab308"), ("lime", "Lime", "#84cc16"),
-                  ("mint", "Mint", "#2dd4bf"), ("cyan", "Cyan", "#06b6d4"),
-                  ("indigo", "Indigo", "#6366f1"), ("silver", "Silver", "#cbd5e1"),
-                  ("custom", "Custom", None))
-    UI_SCALES = (90, 100, 110, 120)                 # % size of the whole window
-    UI_RADII = (("sharp", 4), ("soft", 10), ("round", 16))
-    UI_FONTS = ("Segoe UI", "Bahnschrift", "Tahoma", "Verdana", "Calibri", "Consolas")
-
-    @staticmethod
-    def hue_hex(h):
-        """A bright color of this hue (0-359) for the custom accent."""
-        import colorsys
-        r, g, b = colorsys.hls_to_rgb((int(h) % 360) / 360.0, 0.58, 0.85)
-        return "#%02x%02x%02x" % (int(r * 255), int(g * 255), int(b * 255))
+    # ---- the window: one design ("Slate") in two modes; see lmonitor/qt/qml/Lmonitor/Tokens.qml
+    UI_MODES = ("dark", "light")
+    UI_SURFACES = {
+        "dark": {"bg0": "#0E1014", "bg1": "#15181D", "card": "#15181D", "cardHi": "#15181D",
+                 "raised": "#232831", "line": "#252A32", "lineStrong": "#333944",
+                 "text": "#ECEFF3", "sub": "#A7AFBB", "dim": "#737B89",
+                 "warn": "#FBBF24", "danger": "#F87171", "info": "#60A5FA", "light": False},
+        "light": {"bg0": "#F3F4F6", "bg1": "#FFFFFF", "card": "#FFFFFF", "cardHi": "#FFFFFF",
+                  "raised": "#FFFFFF", "line": "#E3E6EA", "lineStrong": "#D2D7DE",
+                  "text": "#12151A", "sub": "#4A5361", "dim": "#737B89",
+                  "warn": "#B45309", "danger": "#DC2626", "info": "#2563EB", "light": True}}
+    # key, name, color in dark mode, color in light mode (darker: readable on white)
+    UI_ACCENTS = (("mint", "Mint", "#2DD4A0", "#047857"), ("blue", "Blue", "#60A5FA", "#2563EB"),
+                  ("violet", "Violet", "#A78BFA", "#7C3AED"), ("orange", "Orange", "#FB923C", "#C2410C"),
+                  ("pink", "Pink", "#F472B6", "#DB2777"), ("slate", "Slate", "#94A3B8", "#475569"))
+    UI_SCALES = (100, 110, 125)                     # % size of the whole window
+    # settings of 1.18 and older -> the new ones
+    OLD_LIGHT_THEMES = ("day", "paper")
+    OLD_ACCENTS = {"auto": "mint", "green": "mint", "teal": "mint", "mint": "mint", "lime": "mint",
+                   "blue": "blue", "cyan": "blue", "indigo": "blue", "violet": "violet",
+                   "orange": "orange", "gold": "orange", "yellow": "orange", "red": "pink",
+                   "rose": "pink", "pink": "pink", "silver": "slate", "custom": "mint"}
 
     @classmethod
     def apply_vendor(cls, vendor):
@@ -195,41 +156,21 @@ class Theme:
         cls.ACCENT, cls.ACCENT_HI, cls.C_ON = p["accent"], p["hi"], p["on"]
         return p
 
-    @classmethod
-    def ui_spec(cls, key):
-        for k, _, _, spec in cls.UI_THEMES:
-            if k == key:
-                return spec
-        return cls.UI_THEMES[0][3]
-
     @staticmethod
     def _on_color(accent):
         r, g, b = (int(accent[i:i + 2], 16) for i in (1, 3, 5))
-        return "#10131a" if (0.299 * r + 0.587 * g + 0.114 * b) > 140 else "#ffffff"
+        return "#0B1015" if (0.299 * r + 0.587 * g + 0.114 * b) > 140 else "#FFFFFF"
 
     @classmethod
-    def apply_ui(cls, theme="default", accent="auto"):
-        """Colors of the whole app window (call before drawing it)."""
-        spec = cls.ui_spec(theme)
-        for k in ("C_BG", "C_SIDE", "C_CARD", "C_TRACK", "SUB", "TXT", "DIM"):
-            setattr(cls, k, spec[k])
-        cls.LIGHT = spec["light"]
-        chosen = dict((k, c) for k, _, c in cls.UI_ACCENTS).get(accent)
-        if chosen:
-            base = chosen
-            on = cls._on_color(chosen)
-        elif spec["accent"]:
-            base = spec["accent"]
-            on = cls._on_color(base)
-        else:
-            base, on = cls.VENDOR["accent"], cls.VENDOR["on"]
-        if cls.LIGHT:   # readable on white
-            base = cls.mix(base, "#000000", 0.16)
-            on = cls._on_color(base)
-        cls.ACCENT, cls.ACCENT_HI, cls.C_ON = (
-            base, cls.mix(base, "#ffffff", 0.18), on)
-
-
+    def ui_colors(cls, mode="dark", accent="mint"):
+        """Every color of the window for a mode + accent (plain data)."""
+        d = dict(cls.UI_SURFACES.get(mode, cls.UI_SURFACES["dark"]))
+        pair = next((a for a in cls.UI_ACCENTS if a[0] == accent), cls.UI_ACCENTS[0])
+        base = pair[3] if d["light"] else pair[2]
+        d["accent"] = base
+        d["accentHover"] = cls.mix(base, "#000000" if d["light"] else "#FFFFFF", 0.14)
+        d["accentText"] = cls._on_color(base)
+        return d
 
     @classmethod
     def palette(cls, key):
@@ -416,7 +357,7 @@ class Settings:
                 "text": 11, "graph": 100, "alpha": 80, "on": True,
                 "driver_asked": False, "look": "dark", "bg": "black",
                 "palette": "auto", "net_unit": "bytes",
-                "ui_theme": "default", "ui_accent": "auto", "sessions_on": True,
+                "ui_mode": "dark", "ui_accent": "mint", "sessions_on": True,
                 "show_mode": "always", "hotkey_secs": 5, "language": "en",
                 "font": "Consolas", "weight": "bold", "label_weight": "bold",
                 "value_color": "white",
@@ -429,7 +370,9 @@ class Settings:
                 # anti-cheat safe mode: auto / always / off (see class SafeMode)
                 "safe_mode": "auto",
                 # window look
-                "ui_scale": 100, "ui_radius": "round", "ui_font": "Segoe UI", "ui_hue": 160,
+                "ui_scale": 100,
+                # the newest version whose "What's new" box was shown (see class WhatsNew)
+                "seen_version": "",
                 "order": Metrics.default_order(),
                 "show": {k: True for k in Metrics.KEYS}}
 
@@ -439,10 +382,11 @@ class Settings:
         DEFAULTS["hud2_" + _k[4:]] = deepcopy(DEFAULTS[_k])
     DEFAULTS.update(hud2_pos="tl", hud2_items=["g_use", "c_use", "r_use"], hud2_theme="toxic")
     del _k
-    EXTRA_KEYS = ("safe_mode", "ui_scale", "ui_radius", "ui_font", "ui_hue")
+    EXTRA_KEYS = ("safe_mode", "ui_scale", "ui_mode", "seen_version")
 
     def __init__(self):
         Paths.migrate()
+        self.existed = os.path.exists(Paths.CFG_FILE)    # False on a new install
         self.data = self._load()
 
     def __getitem__(self, key):
@@ -471,7 +415,7 @@ class Settings:
                 raw = json.load(f)
             for k in ("pos", "x", "y", "layout", "text", "graph", "alpha", "on",
                       "driver_asked", "look", "bg", "monitor", "refresh",
-                      "palette", "net_unit", "ui_theme", "ui_accent",
+                      "palette", "net_unit",
                       "sessions_on", "show_mode", "hotkey_secs", "font", "weight",
                       "label_weight", "value_color", "language", "hud_on", "hud_items",
                       "hud_pos", "hud_x", "hud_y", "hud_monitor", "hud_size", "hud_layout",
@@ -482,6 +426,13 @@ class Settings:
             for k in self.DEFAULTS:
                 if (k.startswith("hud2_") or k in self.EXTRA_KEYS) and k in raw:
                     cfg[k] = raw[k]
+            # 1.18 and older: 10 themes / 17 accents / 4 sizes -> light or dark, 6 accents, 3 sizes
+            if "ui_mode" not in raw and "ui_theme" in raw:
+                cfg["ui_mode"] = "light" if raw["ui_theme"] in Theme.OLD_LIGHT_THEMES else "dark"
+            if "ui_accent" in raw:
+                cfg["ui_accent"] = Theme.OLD_ACCENTS.get(raw["ui_accent"], raw["ui_accent"])
+            if raw.get("ui_scale") in (90, 120):
+                cfg["ui_scale"] = {90: 100, 120: 125}[raw["ui_scale"]]
             shows = raw.get("show", {})
             for k in Metrics.KEYS:
                 if k in shows:
@@ -515,10 +466,10 @@ class Settings:
             cfg["language"] = "en"
         if cfg["net_unit"] not in ("bytes", "bits"):
             cfg["net_unit"] = "bytes"
-        if cfg["ui_theme"] not in [k for k, _, _, _ in Theme.UI_THEMES]:
-            cfg["ui_theme"] = "default"
-        if cfg["ui_accent"] not in [k for k, _, _ in Theme.UI_ACCENTS]:  # includes "custom"
-            cfg["ui_accent"] = "auto"
+        if cfg["ui_mode"] not in Theme.UI_MODES:
+            cfg["ui_mode"] = "dark"
+        if cfg["ui_accent"] not in [a[0] for a in Theme.UI_ACCENTS]:
+            cfg["ui_accent"] = "mint"
         if not isinstance(cfg["font"], str) or not cfg["font"].strip() \
                 or len(cfg["font"]) > 64 or any(ord(c) < 32 for c in cfg["font"]):
             cfg["font"] = "Consolas"
@@ -573,11 +524,11 @@ class Settings:
             cfg["safe_mode"] = "auto"
         if cfg["ui_scale"] not in Theme.UI_SCALES or isinstance(cfg["ui_scale"], bool):
             cfg["ui_scale"] = 100
-        if cfg["ui_radius"] not in [k for k, _ in Theme.UI_RADII]:
-            cfg["ui_radius"] = "round"
-        if cfg["ui_font"] not in Theme.UI_FONTS:
-            cfg["ui_font"] = "Segoe UI"
-        cfg["ui_hue"] = cls._num(cfg["ui_hue"], 0, 359, 160)
+        # the overlay bar has one look since 1.19 (dark, see-through; only the opacity is set)
+        cfg["look"], cfg["bg"], cfg["value_color"] = "dark", "black", "white"
+        cfg["weight"] = cfg["label_weight"] = "bold"
+        if not isinstance(cfg["seen_version"], str) or len(cfg["seen_version"]) > 20:
+            cfg["seen_version"] = ""
         return cfg
 
     def save(self):
@@ -591,8 +542,10 @@ class Settings:
             Logger.error("settings save")
 
     def reset(self):
+        seen = self.data.get("seen_version", "")
         self.data.clear()
         self.data.update(deepcopy(self.DEFAULTS))
+        self.data["seen_version"] = seen          # "Reset" must not show What's new again
 
 
 # =============================================================== Profiles
@@ -787,6 +740,31 @@ class WinApi:
             return False
 
     @classmethod
+    def memory_mb(cls):
+        """Lmonitor's working set in MB (cheap to read; Task Manager shows a bit less)."""
+        try:
+            return psutil.Process().memory_info().rss / 2 ** 20
+        except Exception:
+            return None
+
+    @classmethod
+    def trim_memory(cls):
+        """Give RAM that is not used right now back to Windows (window closed to the tray).
+        After the main window was drawn once the graphics driver, Qt and the sensor library
+        keep ~250 MB in RAM that nothing touches while only the tray / overlays run. Windows
+        moves it out and brings back only the pages that are used again (overlays need about
+        20-30 MB). Nothing is lost; opening the window loads the rest again."""
+        try:
+            import gc
+            gc.collect()
+            ps = ctypes.WinDLL("psapi")
+            ps.EmptyWorkingSet.argtypes = [wintypes.HANDLE]
+            ps.EmptyWorkingSet.restype = wintypes.BOOL
+            return bool(ps.EmptyWorkingSet(wintypes.HANDLE(-1)))
+        except Exception:
+            return False
+
+    @classmethod
     def click_through_hwnd(cls, h, on):
         """Mouse clicks pass through this window (on) or reach it (off)."""
         u = cls.user32
@@ -798,63 +776,6 @@ class WinApi:
     @classmethod
     def keep_on_top_hwnd(cls, h):
         cls.user32.SetWindowPos(h, -1, 0, 0, 0, 0, 0x13)
-
-
-    @staticmethod
-    def blur_supported():
-        """Blur-behind (acrylic) needs Windows 10 version 1803 or newer."""
-        try:
-            return sys.getwindowsversion().build >= 17134
-        except Exception:
-            return False
-
-
-    @classmethod
-    def blur_hwnd(cls, hwnd, tint=None, alpha=0):
-        """Windows blur-behind on (tint = "#rrggbb") or off (tint = None).
-
-        Uses the undocumented SetWindowCompositionAttribute call. Returns
-        True when Windows accepted it.
-        """
-        try:
-            class Accent(ctypes.Structure):
-                _fields_ = [("state", ctypes.c_int), ("flags", ctypes.c_int),
-                            ("color", ctypes.c_uint), ("anim", ctypes.c_int)]
-
-            class Data(ctypes.Structure):
-                _fields_ = [("attr", ctypes.c_int), ("data", ctypes.c_void_p),
-                            ("size", ctypes.c_size_t)]
-            a = Accent()
-            if tint is not None:
-                r, g, b = (int(tint[i:i + 2], 16) for i in (1, 3, 5))
-                a.state, a.flags = 4, 2          # acrylic blur-behind
-                a.color = (alpha << 24) | (b << 16) | (g << 8) | r  # AABBGGRR
-            d = Data(19, ctypes.cast(ctypes.byref(a), ctypes.c_void_p),
-                     ctypes.sizeof(a))
-            ok = cls.user32.SetWindowCompositionAttribute(
-                hwnd, ctypes.byref(d))
-            return bool(ok) or tint is None
-        except Exception:
-            return tint is None
-
-    @classmethod
-    def round_hwnd(cls, hwnd, on=True, w=0, h=0, r=10):
-        """Rounded window shape (needed for blur, which fills the whole
-        rectangle). Windows 11: DWM corners; older Windows: a window region
-        of w x h physical pixels."""
-        try:
-            if sys.getwindowsversion().build >= 22000:
-                pref = ctypes.c_int(2 if on else 0)     # DWMWCP_ROUND / default
-                ctypes.windll.dwmapi.DwmSetWindowAttribute(
-                    hwnd, 33, ctypes.byref(pref), 4)
-            elif on and w > 0 and h > 0:
-                rgn = ctypes.windll.gdi32.CreateRoundRectRgn(
-                    0, 0, int(w) + 1, int(h) + 1, 2 * r, 2 * r)
-                cls.user32.SetWindowRgn(hwnd, rgn, True)
-            else:
-                cls.user32.SetWindowRgn(hwnd, None, True)
-        except Exception:
-            pass
 
 
 
@@ -1861,11 +1782,68 @@ class FpsMonitor:
         return fps, avg, p.low, last, graph
 
 
+# =============================================================== What's new
+class WhatsNew:
+    """What a version added, shown once after installing it: a box in the middle of the
+    window with a short animation per item (lmonitor/qt/qml/components/WhatsNew.qml).
+
+    For a new feature release add an entry at the top: version, the version it is compared
+    with, and one slide per change. "art" picks the animation (netusage, hours, meter,
+    frametime, smooth - or "generic"); "kind" is "new" or "fix". A version without an entry
+    shows nothing. Texts are English; Persian ones are in fa.js."""
+    ENTRIES = (
+        {"version": "1.19.0", "since": "1.18.6", "slides": (
+            {"art": "design", "kind": "new", "title": "A new look",
+             "text": "A calmer, cleaner design: flat cards, icons in the menu and clear colors, made for Windows."},
+            {"art": "lightdark", "kind": "new", "title": "Light and dark",
+             "text": "Pick Light or Dark in Personalize, with one of six accent colors. Both modes are designed with the same care."},
+            {"art": "dashboard", "kind": "new", "title": "A new Home",
+             "text": "Four clear cards with the temperature in the middle of each gauge, the network, and This PC: up time, battery, power plan and your PC check score."},
+            {"art": "simple", "kind": "new", "title": "Fewer, better settings",
+             "text": "Personalize and the overlay's look were simplified: no more themes, fonts, corner styles, glass or color pickers."},),
+         },
+        {"version": "1.18.5", "since": "1.18.0", "slides": (
+            {"art": "netusage", "kind": "new", "title": "Network usage",
+             "text": "Click the Network card on Home: how much you downloaded and uploaded in the "
+                     "last 1, 15 or 30 days - every day, every hour and every program."},
+            {"art": "hours", "kind": "new", "title": "Hour by hour, easy to read",
+             "text": "Pick a day and every hour gets one line: the time, the amount and a bar. "
+                     "Click an hour to see which programs used it."},
+            {"art": "meter", "kind": "new", "title": "Today, without waiting",
+             "text": "Windows writes its records late. Lmonitor now counts the newest hours itself, "
+                     "so today's usage shows right away."},
+            {"art": "frametime", "kind": "fix", "title": "Steady frame time",
+             "text": "The graph overlay no longer jumps to -- or shows holes in Frame time while "
+                     "the game runs at a steady frame rate."},
+            {"art": "smooth", "kind": "fix", "title": "Charts in one piece",
+             "text": "Real-time charts stay one line when you switch between pages."}),
+         },
+    )
+
+    @staticmethod
+    def parse(v):
+        try:
+            return tuple(int(x) for x in str(v).split("."))
+        except ValueError:
+            return ()
+
+    @classmethod
+    def pending(cls, seen, current):
+        """What to show: {version, since, slides} for every entry newer than `seen` up to
+        `current` (newest first, slides joined), or None."""
+        s, c = cls.parse(seen or "0"), cls.parse(current)
+        got = [e for e in cls.ENTRIES if s < cls.parse(e["version"]) <= c]
+        if not got:
+            return None
+        return {"version": got[0]["version"], "since": got[-1]["since"],
+                "slides": [dict(x) for e in got for x in e["slides"]]}
+
+
 # =============================================================== App info
 class AppInfo:
     """Name / version shown in the Hardware > System tab."""
     NAME = "Lmonitor"
-    VERSION = "1.18.3"
+    VERSION = "1.19.1"
     PUBLISHER = ""      # put your name or company here (empty = "Not set")
     URL = "https://github.com/unrealhamed/Lmonitor"
 
@@ -2211,6 +2189,23 @@ class NetworkReader:
         use = [n for n in up_now if n not in self.virtual] or up_now
         return (sum(self.speeds[n][0] for n in use),
                 sum(self.speeds[n][1] for n in use))
+
+    def since_boot(self):
+        """(received, sent) bytes of the real adapters that are up, counted by Windows since
+        each adapter came up (normally: since start-up). (None, None) before the first reading."""
+        if self.prev is None:
+            return None, None
+        up = [n for n, (isup, _sp) in self.info.items() if isup and n not in self.virtual]
+        c = self.prev[1]
+        return (sum(c[n][0] for n in up if n in c), sum(c[n][1] for n in up if n in c))
+
+    def main_adapter(self):
+        """(name, link Mbit/s) of the busiest real adapter that is up, or None."""
+        items = [(n, sp, (d or 0) + (u or 0)) for n, sp, d, u in self.interfaces() if n not in self.virtual]
+        if not items:
+            return None
+        n, sp, _ = max(items, key=lambda x: x[2])
+        return n, sp
 
     def interfaces(self):
         """[(name, link Mbit/s, down, up)] for interfaces that are up."""

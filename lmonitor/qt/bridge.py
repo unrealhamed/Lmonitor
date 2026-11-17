@@ -28,7 +28,6 @@ class Bridge(QObject):
     settingsChanged = Signal()
     overlayChanged = Signal()
     movingChanged = Signal()
-    glassChanged = Signal()
     hardwareChanged = Signal()
     qmlErrorsChanged = Signal()
     coveredChanged = Signal()
@@ -55,7 +54,6 @@ class Bridge(QObject):
         self._ov = {"groups": [], "graph": None}
         self._range = 0
         self._hw_tab, self._hw, self._hw_open = 0, [[], []], False
-        self._glass = False
         self._ui_visible = "--startup" not in sys.argv
         self._autostart, self._autostart_err = None, ""
         self._covered = False            # a full-screen program (game) is in front
@@ -91,6 +89,13 @@ class Bridge(QObject):
         self._save.setSingleShot(True)
         self._save.setInterval(400)
         self._save.timeout.connect(self._b.save_settings)
+        self._trim_once = QTimer(self)
+        self._trim_once.setSingleShot(True)
+        self._trim_once.setInterval(self.TRIM_AFTER_MS)
+        self._trim_once.timeout.connect(self._trim)
+        self._trim_timer = QTimer(self)
+        self._trim_timer.setInterval(self.TRIM_EVERY_MS)
+        self._trim_timer.timeout.connect(lambda: self._trim(True))
 
     # ---- lifecycle
     def start(self):
@@ -98,6 +103,9 @@ class Bridge(QObject):
             t.start()
         self._autostart_job(None)
         self._b.net_meter.start()               # Network usage: the hours Windows has not written yet
+        self._trim_timer.start()
+        if not self._ui_visible:                # started at sign-in, only the tray
+            QTimer.singleShot(20000, self._trim)
         self.checkUpdate()
         # ...and again every 3 hours while Lmonitor runs, so a release that comes out
         # later is noticed without pressing "Check for updates"
@@ -394,6 +402,30 @@ class Bridge(QObject):
                 self._b.set_setting(k, v)
         self.settingsTouched()
 
+    # ---- What's new: shown once after an update (components/WhatsNew.qml)
+    _wn = None
+
+    @Property("QVariantMap", constant=True)
+    def whatsNew(self):
+        if self._wn is None:
+            try:
+                self._wn = self._b.whats_new() or {}
+            except Exception:
+                Logger.error("whats new")
+                self._wn = {}
+        return self._wn
+
+    @Property("QVariantMap", constant=True)
+    def whatsNewLatest(self):
+        """The newest What's new, for the button on the About page."""
+        from lmonitor.engine import WhatsNew
+        e = WhatsNew.ENTRIES[0] if WhatsNew.ENTRIES else None
+        return {"version": e["version"], "since": e["since"], "slides": [dict(x) for x in e["slides"]]} if e else {}
+
+    @Slot()
+    def whatsNewDone(self):
+        self._b.whats_new_seen()
+
     # ---- network usage (Home > Network): Windows' own records, read when the view opens
     @Property("QVariantMap", notify=netUsageChanged)
     def netUsage(self):
@@ -450,13 +482,6 @@ class Bridge(QObject):
     def uiScales(self):
         return list(Theme.UI_SCALES)
 
-    @Property("QStringList", constant=True)
-    def uiFonts(self):
-        return list(Theme.UI_FONTS)
-
-    @Slot(int, result=str)
-    def hueHex(self, h):
-        return Theme.hue_hex(h)
 
     @Property("QVariantMap", notify=dashboardChanged)
     def dashboard(self):
@@ -563,29 +588,17 @@ class Bridge(QObject):
         return [{"name": g, "items": [{"key": k, "label": l} for k, l, _ in items]}
                 for g, items in Metrics.GROUPS]
 
-    @Property("QVariantList", constant=True)
-    def backgrounds(self):
-        return [{"key": k, "name": n, "hex": Theme.overlay_bg(k)}
-                for k, n, _ in Theme.OVERLAY_BGS]
-
     @Property("QVariantMap", notify=settingsChanged)
     def ui(self):
         if self._ui_cache is None:                   # built once per change
             self._ui_cache = self._b.ui_style()
         return self._ui_cache
 
-    @Property("QVariantList", constant=True)
-    def uiThemes(self):
-        out = []
-        for k, n, note, _ in Theme.UI_THEMES:
-            d = self._b.ui_style(k, "auto")
-            d.update(key=k, name=n, note=note)
-            out.append(d)
-        return out
-
-    @Property("QVariantList", constant=True)
+    @Property("QVariantList", notify=settingsChanged)
     def uiAccents(self):
-        return [{"key": k, "name": n, "hex": c or ""} for k, n, c in Theme.UI_ACCENTS]
+        """The accent choices in the colors of the current mode."""
+        light = self._b.settings["ui_mode"] == "light"
+        return [{"key": k, "name": n, "hex": lt if light else dk} for k, n, dk, lt in Theme.UI_ACCENTS]
 
     @Property(str, notify=settingsChanged)
     def density(self):
@@ -595,11 +608,6 @@ class Bridge(QObject):
     def setDensity(self, key):
         if self._b.set_density(key):
             self.settingsTouched()
-
-    @Property("QVariantList", constant=True)
-    def valueColors(self):
-        return [{"key": k, "name": n, "hex": c or Theme.ACCENT}
-                for k, n, c in Theme.VALUE_COLORS]
 
     @Property("QStringList", constant=True)
     def fonts(self):
@@ -660,25 +668,13 @@ class Bridge(QObject):
 
     @Slot()
     def resetSettings(self):
-        keep = {k: self._b.settings[k] for k in ("ui_theme", "ui_accent")}
         self._b.reset_settings()
-        for k, v in keep.items():
-            self._b.set_setting(k, v)
         self.settingsTouched()
 
     # ---- overlay host
     @Property(bool, notify=movingChanged)
     def moving(self):
         return bool(self.host and self.host.moving)
-
-    @Property(bool, notify=glassChanged)
-    def glassOk(self):
-        return self._glass
-
-    def setGlassOk(self, ok):
-        if ok != self._glass:
-            self._glass = ok
-            self.glassChanged.emit()
 
     @Slot(bool)
     def setUiVisible(self, visible):
@@ -687,6 +683,21 @@ class Bridge(QObject):
             self._ui_visible = bool(visible)
             if visible:
                 self._wake.set()
+                self._trim_once.stop()
+            else:
+                self._trim_once.start()          # closed / minimized: give the RAM back
+
+    # ---- memory while only the tray / overlays run (see WinApi.trim_memory)
+    TRIM_AFTER_MS = 4000                         # after the window was closed
+    TRIM_EVERY_MS = 5 * 60 * 1000                # then now and then, if it grew again
+    TRIM_ABOVE_MB = 60
+
+    def _trim(self, only_if_big=False):
+        if self._ui_visible:
+            return
+        if only_if_big and (WinApi.memory_mb() or 0) < self.TRIM_ABOVE_MB:
+            return
+        WinApi.trim_memory()
 
     @Slot(bool)
     def setMoving(self, on):

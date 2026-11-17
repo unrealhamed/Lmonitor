@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import Lmonitor
 import "../components"
 
@@ -30,6 +31,8 @@ Item {
                 spacing: 12
                 Pill { label: backend.update.state === "checking" ? Tr.t("Checking...") : Tr.t("Check for updates")
                        onClicked: backend.checkUpdate() }
+                Pill { visible: !!backend.whatsNewLatest.slides; label: Tr.t("What's new")
+                       onClicked: Window.window.showWhatsNew() }
                 Pill { visible: backend.update.state === "available"; primary: true
                        label: Tr.line(Tr.t("Download and install ") + backend.update.version)
                        onClicked: backend.installUpdate() }

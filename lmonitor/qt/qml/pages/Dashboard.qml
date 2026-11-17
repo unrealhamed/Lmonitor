@@ -3,9 +3,9 @@ import QtQuick.Window
 import Lmonitor
 import "../components"
 
-// Home: welcome card, four hardware cards, network, performance chart and what is
-// going on right now (game, frame rate, session). Every number comes from backend.dashboard (real readings);
-// missing data shows "--" or "No data".
+// Home: four cards (CPU, GPU, memory, storage), the performance chart, what is going on
+// right now, the network and this PC. Every number comes from backend.dashboard (real
+// readings); missing data shows "--" - never a made-up number.
 Item {
     id: page
     readonly property var d: backend.dashboard
@@ -15,11 +15,11 @@ Item {
     readonly property var gpuC: cards.gpu || ({})
     readonly property var ramC: cards.ram || ({})
     readonly property var diskC: cards.disk || ({})
-    readonly property var st: ready && d.status ? d.status : ({})
-    readonly property var s: backend.settings
-    readonly property int g: Tokens.gap
+    readonly property var net: ready && d.network ? d.network : ({})
+    readonly property var pc: ready && d.pc_info ? d.pc_info : ({})
     readonly property var now: ready && d.now ? d.now : ({})
     readonly property var safe: ready && d.safe ? d.safe : ({active: false})
+    readonly property int g: Tokens.gap
 
     // the chart: real time (4 readings a second) or 1 minute
     readonly property var spans: [0, 60]
@@ -31,215 +31,237 @@ Item {
                   function onRangeChanged() { backend.setGraphFast(backend.rangeIndex === 0); page.refreshChart() } }
     Component.onCompleted: backend.setGraphFast(backend.rangeIndex === 0)
 
+    function num(v, digits) { return v === null || v === undefined ? "--" : (digits ? v.toFixed(digits) : String(Math.round(v))) }
     function ghz(mhz) { return mhz ? (mhz / 1000).toFixed(1) + Tr.t(" GHz") : "" }
+    function join(parts) { return parts.filter(function (x) { return x !== "" }).join("  ·  ") }
     function go(name) { Window.window.goTo(name) }
-    function worst(a, b) {
-        var rank = {none: 0, ok: 1, low: 2, warm: 2, high: 3, hot: 3, full: 3}
-        return (rank[a] || 0) >= (rank[b] || 0) ? a : b
-    }
-    readonly property string tempStatus: {
-        var a = cpuC.temp !== null && cpuC.temp !== undefined ? cpuC.status : "none"
-        var b = gpuC.temp !== null && gpuC.temp !== undefined ? gpuC.status : "none"
-        return worst(a, b)
-    }
-    function tempLine() {
-        if (!ready) return ""
-        var p = []
-        if (cpuC.temp !== null && cpuC.temp !== undefined) p.push(Tr.t("CPU ") + Math.round(cpuC.temp) + "°")
-        if (gpuC.temp !== null && gpuC.temp !== undefined) p.push(Tr.t("GPU ") + Math.round(gpuC.temp) + "°")
-        return p.length ? p.join(" · ") : Tr.t("No temperature sensor")
-    }
 
     PageHeader {
         id: head
         width: parent.width
-        kicker: ready && d.pc ? d.pc : Tr.t("This PC")
+        kicker: ready ? Tr.line(Tr.t("Welcome back") + (d.user ? ", " + d.user : "") + (d.pc ? "  ·  " + d.pc : "")) : ""
         title: Tr.t("Home")
         Rectangle {
-            width: 168; height: 42; radius: 12
-            color: Tokens.fg(0.05); border.width: 1; border.color: Tokens.line
-            Text { x: 16; anchors.verticalCenter: parent.verticalCenter; text: Tr.t("Overlay")
-                   color: Tokens.text; font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: true }
-            ToggleSwitch { anchors.right: parent.right; anchors.rightMargin: 10
-                           anchors.verticalCenter: parent.verticalCenter
-                           checked: page.s.on
-                           onToggled: function (v) { backend.setSetting("on", v) } }
+            width: ovRow.width + 28; height: 40; radius: 10; color: Tokens.card
+            border.width: 1; border.color: Tokens.line
+            Row { id: ovRow; anchors.centerIn: parent; spacing: 14
+                  Text { anchors.verticalCenter: parent.verticalCenter; text: Tr.t("Overlay"); color: Tokens.text
+                         font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.weight: Font.DemiBold }
+                  ToggleSwitch { anchors.verticalCenter: parent.verticalCenter; checked: backend.settings.on
+                                 onToggled: function (v) { backend.setSetting("on", v) } } }
         }
         Rectangle {
-            width: gl.width + 86; height: 42; radius: 12
-            color: Tokens.fg(0.05); border.width: 1; border.color: Tokens.line
-            Text { id: gl; x: 16; anchors.verticalCenter: parent.verticalCenter; text: Tr.t("Graph overlay")
-                   color: Tokens.text; font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: true }
-            ToggleSwitch { anchors.right: parent.right; anchors.rightMargin: 10
-                           anchors.verticalCenter: parent.verticalCenter
-                           checked: (backend.hudStyles[0] || ({})).hud_on === true
-                           onToggled: function (v) { backend.setHudSetting(0, "hud_on", v) } }
+            width: hudRow.width + 28; height: 40; radius: 10; color: Tokens.card
+            border.width: 1; border.color: Tokens.line
+            Row { id: hudRow; anchors.centerIn: parent; spacing: 14
+                  Text { anchors.verticalCenter: parent.verticalCenter; text: Tr.t("Graph overlay"); color: Tokens.text
+                         font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.weight: Font.DemiBold }
+                  ToggleSwitch { anchors.verticalCenter: parent.verticalCenter
+                                 checked: (backend.hudStyles[0] || ({})).hud_on === true
+                                 onToggled: function (v) { backend.setHudSetting(0, "hud_on", v) } } }
         }
     }
 
-    readonly property real bodyY: head.height + 12
-    readonly property real rowA: 344
-    readonly property real rowB: height - bodyY - rowA - g
-    readonly property real leftW: Math.round(width * 0.38)
-    readonly property real rightW: width - leftW - g
+    // ---- the four cards
+    readonly property real y0: head.height + 12
+    readonly property real tileW: (width - 3 * g) / 4
+    readonly property real tileH: 168
+    MetricTile {
+        x: 0; y: page.y0; width: page.tileW; height: page.tileH
+        title: "CPU"; caption: Tr.t("Processor"); glyph: ""; tone: Tokens.cpu
+        status: page.cpuC.status || "none"
+        big: page.num(page.cpuC.use); bigUnit: "%"
+        line1: page.join([Tr.t("Usage"), (page.cpuC.approx ? "~" : "") + page.ghz(page.cpuC.clock_mhz),
+                          page.cpuC.power_w !== null && page.cpuC.power_w !== undefined ? Math.round(page.cpuC.power_w) + " W" : ""])
+        line2: page.cpuC.name || ""
+        warning: page.cpuC.note || ""
+        gauge: true; gaugeValue: page.cpuC.temp !== undefined ? page.cpuC.temp : null
+    }
+    MetricTile {
+        x: page.tileW + page.g; y: page.y0; width: page.tileW; height: page.tileH
+        title: "GPU"; caption: Tr.t("Graphics"); glyph: ""; tone: Tokens.gpu
+        status: page.gpuC.status || "none"
+        big: page.num(page.gpuC.use); bigUnit: "%"
+        line1: page.join([Tr.t("Usage"), page.ghz(page.gpuC.clock_mhz),
+                          page.gpuC.power_w !== null && page.gpuC.power_w !== undefined ? Math.round(page.gpuC.power_w) + " W" : ""])
+        line2: page.gpuC.name || ""
+        gauge: true; gaugeValue: page.gpuC.temp !== undefined ? page.gpuC.temp : null
+    }
+    MetricTile {
+        x: 2 * (page.tileW + page.g); y: page.y0; width: page.tileW; height: page.tileH
+        title: Tr.t("Memory"); caption: page.ramC.total_gb !== undefined ? Math.round(page.ramC.total_gb) + " GB" : ""
+        glyph: ""; tone: Tokens.ram
+        status: page.ramC.status || "none"
+        big: page.num(page.ramC.use); bigUnit: "%"
+        line1: page.ramC.used_gb !== undefined ? page.ramC.used_gb.toFixed(1) + Tr.t(" GB used of ") + Math.round(page.ramC.total_gb) + " GB" : ""
+        bar: page.ramC.use !== null && page.ramC.use !== undefined ? page.ramC.use / 100 : -1
+    }
+    MetricTile {
+        x: 3 * (page.tileW + page.g); y: page.y0; width: page.tileW; height: page.tileH
+        title: Tr.t("Storage"); caption: page.diskC.mount ? Tr.t("Drive ") + page.diskC.mount : ""
+        glyph: ""; tone: Tokens.disk
+        status: page.diskC.status || "none"
+        big: page.num(page.diskC.free_gb); bigUnit: " GB"
+        line1: page.diskC.total_gb !== undefined ? Tr.t("free of ") + Math.round(page.diskC.total_gb) + " GB" : ""
+        bar: page.diskC.use !== null && page.diskC.use !== undefined ? page.diskC.use / 100 : -1
+    }
 
-    // ---- welcome
-    Card {
-        id: welcome
-        x: 0; y: page.bodyY; width: page.leftW; height: page.rowA; tint: true
-        Text { x: 22; y: 20; text: Tr.t("Welcome back"); color: Tokens.sub
-               font.family: Tokens.font; font.pixelSize: Tokens.fsBody }
-        Text { x: 22; y: 40; width: parent.width - 44; elide: Text.ElideRight
-               text: page.ready && page.d.user ? page.d.user : Tr.t("Gamer")
-               color: Tokens.text; font.family: Tokens.font; font.pixelSize: 34; font.bold: true }
-        // The rows stay; only their texts change each second (a list made anew every second
-        // made the Repeater delete and build all its rows again).
-        readonly property var checks: [
-                    {t: Tr.t("Temperatures"), s: page.tempStatus, sub: page.tempLine()},
-                    {t: Tr.t("Memory"), s: page.ready ? page.ramC.status || "none" : "none",
-                     sub: page.ready && page.ramC.used_gb !== undefined ? page.ramC.used_gb.toFixed(1) + Tr.t(" of ") + Math.round(page.ramC.total_gb) + Tr.t(" GB used") : ""},
-                    {t: Tr.t("Storage"), s: page.ready ? page.diskC.status || "none" : "none",
-                     sub: page.ready && page.diskC.free_gb !== undefined ? Math.round(page.diskC.free_gb) + Tr.t(" GB free on ") + page.diskC.mount : Tr.t("No drive data")},
-                    {t: Tr.t("FPS capture"), s: page.ready ? (({ready: "ok", missing: "warm", idle: "none"})[page.st.fps] || "none") : "none",
-                     sub: page.ready ? (({ready: Tr.t("Ready"), missing: Tr.t("Capture tool missing"), idle: Tr.t("Starts with a game")})[page.st.fps] || "") : ""}
-                ]
-        Column {
-            x: 22; y: 100; spacing: 12
+    // ---- lower part: chart + network (left), right now + this PC (right)
+    readonly property real y1: y0 + tileH + g
+    readonly property real leftW: Math.round((width - g) * 0.635)
+    readonly property real rightW: width - leftW - g
+    readonly property real netH: 148
+    readonly property real perfH: height - y1 - netH - g
+
+    Card {                                          // ---- performance
+        x: 0; y: page.y1; width: page.leftW; height: page.perfH
+        Text { x: 20; y: 16; text: Tr.t("Performance"); color: Tokens.text
+               font.family: Tokens.font; font.pixelSize: Tokens.fsHead; font.weight: Font.DemiBold }
+        Row {
+            x: 20; y: 42; spacing: 16
             Repeater {
-                model: 4
+                model: 3
                 Row {
-                    id: checkRow
-                    readonly property var c: welcome.checks[index] || ({})
-                    spacing: 12
-                    Dot { y: 6; status: checkRow.c.s || "none" }
-                    Column {
-                        Text { text: checkRow.c.t || ""; color: Tokens.text
-                               font.family: Tokens.font; font.pixelSize: 15; font.bold: true }
-                        Text { text: Tr.t(checkRow.c.sub || ""); color: Tokens.dim
-                               font.family: Tokens.font; font.pixelSize: Tokens.fsSmall }
-                    }
+                    spacing: 6
+                    readonly property var c: [page.cpuC, page.ramC, page.gpuC][index]
+                    Rectangle { width: 8; height: 8; radius: 4; anchors.verticalCenter: parent.verticalCenter
+                                color: [Tokens.cpu, Tokens.ram, Tokens.gpu][index] }
+                    Text { text: ["CPU", "RAM", "GPU"][index] + " " + page.num(parent.c.use) + "%"; color: Tokens.sub
+                           font.family: Tokens.font; font.pixelSize: 12 }
                 }
             }
         }
+        Segmented { anchors.right: parent.right; anchors.rightMargin: 18; y: 16; width: 190
+                    model: backend.rangeNames; index: backend.rangeIndex
+                    onPicked: function (i) { backend.setRange(i) } }
+        GraphChart {
+            x: 14; y: 72; width: parent.width - 30; height: parent.height - 72 - 16
+            series: [page.pd.c_use || [], page.pd.r_use || [], page.pd.g_use || []]
+            colors: [Tokens.cpu, Tokens.ram, Tokens.gpu]; fill: false; maxValue: 100; unit: "%"
+            slots: page.pd.points || 60; slotMs: page.pd.slot_ms || 1000
+            scrollEnd: page.pd.end_ms || 0; extra: page.pd.extra || 0
+            delayMs: page.pd.delay_ms || 0; nowMs: Clock.now
+        }
+    }
+
+    Card {                                          // ---- network
+        x: 0; y: page.y1 + page.perfH + page.g; width: page.leftW; height: page.netH
+        Rectangle { x: 20; y: 16; width: 34; height: 34; radius: 9; color: Tokens.tint(Tokens.cyan, 0.14)
+                    Text { anchors.centerIn: parent; text: ""; color: Tokens.cyan
+                           font.family: Tokens.iconFont; font.pixelSize: 17 } }
+        Column {
+            x: 64; y: 17; spacing: 1
+            Text { text: Tr.t("Network"); color: Tokens.text
+                   font.family: Tokens.font; font.pixelSize: 14; font.weight: Font.DemiBold }
+            Text { text: page.net.adapter ? Tr.line(page.net.adapter + (page.net.link ? "  ·  " + page.net.link + " Mbit/s" : ""))
+                                          : Tr.t("Not connected")
+                   color: Tokens.dim; font.family: Tokens.font; font.pixelSize: 12 }
+        }
+        Pill { anchors.right: parent.right; anchors.rightMargin: 18; y: 16; height: 32
+               label: Tr.t("Usage history"); onClicked: page.go("Network usage") }
         Row {
-            x: 22; y: parent.height - 56; spacing: 10
-            Pill { label: Tr.t("Graphs"); onClicked: page.go("Graphs") }
-            Pill { label: Tr.t("Hardware"); onClicked: page.go("Hardware") }
+            x: 20; y: 72; spacing: 30
+            Repeater {
+                model: 3
+                Column {
+                    spacing: 2
+                    Text { text: [Tr.t("Download"), Tr.t("Upload"), Tr.t("Since start-up")][index]; color: Tokens.dim
+                           font.family: Tokens.font; font.pixelSize: 12 }
+                    Text { text: [page.net.down || "--", page.net.up || "--", page.net.since_boot || "--"][index]
+                           color: [Tokens.cyan, Tokens.violet, Tokens.text][index]
+                           font.family: Tokens.fontDisplay; font.pixelSize: 22; font.weight: Font.DemiBold }
+                }
+            }
         }
-    }
-
-    // ---- hardware cards
-    readonly property real rx: leftW + g
-    readonly property real hh: (rowA - g) / 2
-    readonly property real w1: Math.round(rightW * 0.5)
-    readonly property real w2: Math.round((rightW - w1 - 2 * g) / 2)
-
-    HwCard {
-        x: page.rx; y: page.bodyY; width: page.w1; height: page.hh
-        title: "CPU"; ring: true; ringColor: Tokens.cpu
-        model: page.cpuC.name || ""
-        info: page.cpuC || ({})
-        detail: page.ready ? (page.cpuC.approx ? "~" : "") + page.ghz(page.cpuC.clock_mhz) : ""
-    }
-    HwCard {
-        x: page.rx + page.w1 + page.g; y: page.bodyY; width: page.w2; height: page.hh
-        title: "RAM"
-        model: page.ready && page.ramC.total_gb !== undefined ? Math.round(page.ramC.total_gb) + " GB" : ""
-        info: page.ramC || ({})
-        detail: page.ready && page.ramC.used_gb !== undefined ? page.ramC.used_gb.toFixed(1) + Tr.t(" GB used") : ""
-    }
-    HwCard {
-        x: page.rx + page.w1 + page.w2 + 2 * page.g; y: page.bodyY; width: page.w2; height: page.hh
-        title: Tr.t("Storage")
-        model: page.ready && page.diskC.mount ? Tr.t("Drive ") + page.diskC.mount : ""
-        info: page.diskC || ({})
-        detail: page.ready && page.diskC.free_gb !== undefined ? Math.round(page.diskC.free_gb) + Tr.t(" GB free") : ""
-    }
-    HwCard {
-        x: page.rx; y: page.bodyY + page.hh + page.g; width: page.w1; height: page.hh
-        title: "GPU"; ring: true; ringColor: Tokens.gpu
-        model: page.gpuC.name || ""
-        info: page.gpuC || ({})
-        detail: page.ready ? ((page.gpuC.power_w !== null && page.gpuC.power_w !== undefined ? Math.round(page.gpuC.power_w) + " W · " : "") + page.ghz(page.gpuC.clock_mhz)) : ""
-    }
-    Card {
-        x: page.rx + page.w1 + page.g; y: page.bodyY + page.hh + page.g
-        width: page.rightW - page.w1 - page.g; height: page.hh
-        Text { x: 18; y: 16; text: Tr.t("Network"); color: Tokens.text
-               font.family: Tokens.font; font.pixelSize: 18; font.bold: true }
-        Text { anchors.right: parent.right; anchors.rightMargin: 18; y: 20
-               text: "↓ " + (page.ready ? page.d.network.down : "--") + "   ↑ " + (page.ready ? page.d.network.up : "--")
-               color: Tokens.sub; font.family: Tokens.font; font.pixelSize: Tokens.fsSmall }
         Sparkline {
-            x: 10; y: 50; width: parent.width - 20; height: parent.height - 60
-            values: page.ready ? page.d.network.hist : []
+            anchors.right: parent.right; anchors.rightMargin: 18; y: 74; width: parent.width * 0.42; height: 54
+            values: page.net.hist || []
             maxValue: { var m = 1; var h = values || []; for (var i = 0; i < h.length; ++i) if (h[i] > m) m = h[i]; return m * 1.15 }
-            color: Tokens.violet
+            color: Tokens.cyan; fill: false
         }
-        // click: how much was used (1 / 15 / 30 days, per hour and per program)
-        Text { x: 18; y: 40; text: Tr.t("Click for usage history"); color: netMouse.containsMouse ? Tokens.accent : Tokens.dim
-               font.family: Tokens.font; font.pixelSize: 10 }
-        Rectangle { anchors.fill: parent; radius: Tokens.radius; color: "transparent"
-                    border.width: 1; border.color: Tokens.accent; visible: netMouse.containsMouse }
-        MouseArea { id: netMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                    onClicked: page.go("Network usage") }
     }
 
-    // ---- chart + what is going on right now
-    PerfChart {
-        x: 0; y: page.bodyY + page.rowA + page.g
-        width: Math.round(page.width * 0.58) - page.g / 2; height: page.rowB
-        d: page.pd; nowMs: Clock.now
-        rangeIndex: backend.rangeIndex
-        rangeNames: backend.rangeNames
-        onRangePicked: function (i) { backend.setRange(i) }
-    }
-    Card {
+    Card {                                          // ---- right now
         id: nowCard
-        x: Math.round(page.width * 0.58) + page.g / 2; y: page.bodyY + page.rowA + page.g
-        width: page.width - x; height: page.rowB
+        x: page.leftW + page.g; y: page.y1; width: page.rightW; height: page.perfH
         Text { x: 20; y: 16; text: Tr.t("Right now"); color: Tokens.text
-               font.family: Tokens.font; font.pixelSize: 18; font.bold: true }
-        FitBar { x: 16; y: 50; width: parent.width - 32; height: 54
+               font.family: Tokens.font; font.pixelSize: Tokens.fsHead; font.weight: Font.DemiBold }
+        Rectangle {
+            visible: !!page.now.game
+            anchors.right: parent.right; anchors.rightMargin: 18; y: 16
+            width: gameRow.width + 16; height: 22; radius: 6; color: Tokens.accentA(0.13)
+            Row { id: gameRow; anchors.centerIn: parent; spacing: 6
+                  Rectangle { width: 7; height: 7; radius: 4; color: Tokens.accent; anchors.verticalCenter: parent.verticalCenter }
+                  Text { text: Tr.t("Game in front"); color: Tokens.accent
+                         font.family: Tokens.font; font.pixelSize: 12; font.weight: Font.DemiBold } }
+        }
+        FitBar { x: 18; y: 50; width: parent.width - 36; height: 46
                  model: backend.overlay.groups.length > 0 ? backend.overlay : backend.preview
                  style: backend.settings }
         readonly property var facts: [
-                    {t: "Game", on: !!page.now.game,
-                     v: page.now.game ? page.now.game.name : Tr.t("No game in front")},
-                    {t: "Frame rate", on: !!page.now.game,
-                     v: page.now.game ? Tr.line(page.now.game.fps + " FPS  ·  " + Tr.t("avg ") + page.now.game.avg
-                                                + (page.now.game.low ? "  ·  1% low " + page.now.game.low : "")) : "--"},
-                    {t: "Session", on: page.now.recording === true,
-                     v: page.now.recording ? Tr.t("Recording") : Tr.t(page.now.session || "")},
-                    {t: "Last session", on: false,
-                     v: page.now.last ? Tr.line(page.now.last.game + (page.now.last.avg_fps ? "  ·  " + Math.round(page.now.last.avg_fps) + " FPS" : "")
-                                                + "  ·  " + page.now.last.when) : Tr.t("none yet")},
-                    {t: "Anti-cheat safe mode", on: page.safe.active === true,
-                     v: page.safe.active ? Tr.line(Tr.t("Active now") + (page.safe.game ? "  ·  " + page.safe.game : "")) : Tr.t("Not active now")}
-                ]
+            {t: "Game", on: !!page.now.game, v: page.now.game ? page.now.game.name : Tr.t("No game in front")},
+            {t: "Frame rate", on: !!page.now.game,
+             v: page.now.game ? Tr.line(page.now.game.fps + " FPS" + (page.now.game.low ? "  ·  1% low " + page.now.game.low : "")) : "--"},
+            {t: "Session", on: page.now.recording === true,
+             v: page.now.recording ? Tr.t("Recording") : Tr.t(page.now.session || "")},
+            {t: "Last session", on: false,
+             v: page.now.last ? Tr.line(page.now.last.game + (page.now.last.avg_fps ? "  ·  " + Math.round(page.now.last.avg_fps) + " FPS" : "")) : Tr.t("none yet")},
+            {t: "Anti-cheat safe mode", on: page.safe.active === true,
+             v: page.safe.active ? Tr.line(Tr.t("Active now") + (page.safe.game ? "  ·  " + page.safe.game : "")) : Tr.t("Not active now")}
+        ]
         Column {
-            x: 20; y: 118; width: parent.width - 40; spacing: 9
+            x: 20; y: 108; width: parent.width - 40
             Repeater {
                 model: 5                    // fixed rows: only their texts change each second
                 Item {
                     id: fact
                     readonly property var f: nowCard.facts[index] || ({})
-                    width: parent.width; height: 22
-                    Rectangle { y: 7; width: 8; height: 8; radius: 4; color: fact.f.on ? Tokens.accent : Tokens.dim }
-                    Text { x: 18; anchors.verticalCenter: parent.verticalCenter; text: Tr.t(fact.f.t || ""); color: Tokens.sub
+                    width: parent.width; height: 36
+                    Rectangle { visible: index > 0; width: parent.width; height: 1; color: Tokens.line }
+                    Text { anchors.verticalCenter: parent.verticalCenter; text: Tr.t(fact.f.t || ""); color: Tokens.sub
                            font.family: Tokens.font; font.pixelSize: Tokens.fsBody }
                     Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                           width: parent.width - 170; horizontalAlignment: Text.AlignRight; elide: Text.ElideRight
-                           text: fact.f.v || ""; color: fact.f.on ? Tokens.text : Tokens.sub
-                           font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: fact.f.on === true }
+                           width: parent.width - 150; horizontalAlignment: Text.AlignRight; elide: Text.ElideRight
+                           text: fact.f.v || ""; color: fact.f.on ? Tokens.text : Tokens.dim
+                           font.family: Tokens.font; font.pixelSize: Tokens.fsBody
+                           font.weight: fact.f.on === true ? Font.DemiBold : Font.Normal }
                 }
             }
         }
-        Row {
-            x: 20; y: parent.height - 56; spacing: 10
-            Pill { label: Tr.t("Sessions"); onClicked: page.go("Sessions") }
-            Pill { label: Tr.t("Overlay"); onClicked: page.go("Overlay") }
-            Pill { label: Tr.t("Graph overlay"); onClicked: page.go("Graph overlay") }
+    }
+
+    Card {                                          // ---- this PC
+        id: pcCard
+        x: page.leftW + page.g; y: page.y1 + page.perfH + page.g; width: page.rightW; height: page.netH
+        Text { x: 20; y: 16; text: Tr.t("This PC"); color: Tokens.text
+               font.family: Tokens.font; font.pixelSize: Tokens.fsHead; font.weight: Font.DemiBold }
+        Text { anchors.right: parent.right; anchors.rightMargin: 20; y: 19; width: parent.width - 140
+               horizontalAlignment: Text.AlignRight; elide: Text.ElideRight
+               text: page.pc.windows || ""; color: Tokens.dim; font.family: Tokens.font; font.pixelSize: 12 }
+        readonly property var items: [
+            {t: "Up time", v: page.pc.uptime || "--", c: Tokens.text},
+            {t: "Battery", v: page.pc.battery ? Tr.line(page.pc.battery.pct + "%  ·  " + Tr.t(page.pc.battery.plugged ? "plugged in" : "on battery"))
+                                             : Tr.t("No battery"), c: Tokens.text},
+            {t: "Power plan", v: page.pc.plan || "--", c: Tokens.text},
+            {t: "PC check", v: page.pc.score !== null && page.pc.score !== undefined ? page.pc.score + " / 100" : Tr.t("Not scanned yet"),
+             c: page.pc.score !== null && page.pc.score !== undefined ? (page.pc.score >= 80 ? Tokens.accent : page.pc.score >= 60 ? Tokens.warn : Tokens.danger) : Tokens.dim,
+             link: true}
+        ]
+        Grid {
+            x: 20; y: 50; columns: 2; columnSpacing: 16; rowSpacing: 12
+            Repeater {
+                model: 4
+                Column {
+                    id: pcItem
+                    readonly property var it: pcCard.items[index] || ({})
+                    width: (pcCard.width - 56) / 2; spacing: 1
+                    Text { text: Tr.t(pcItem.it.t || ""); color: Tokens.dim; font.family: Tokens.font; font.pixelSize: 12 }
+                    Text { text: pcItem.it.v || ""; color: pcItem.it.c || Tokens.text; width: pcItem.width; elide: Text.ElideRight
+                           font.family: Tokens.font; font.pixelSize: 14; font.weight: Font.DemiBold
+                           MouseArea { anchors.fill: parent; enabled: pcItem.it.link === true
+                                       cursorShape: Qt.PointingHandCursor; onClicked: page.go("PC check") } }
+                }
+            }
         }
     }
 }

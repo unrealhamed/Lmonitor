@@ -5,21 +5,23 @@ It puts a small click-through bar over your game (FPS, 1% lows, CPU / GPU / RAM 
 
 [فارسی](README.fa.md) · [Download](https://github.com/unrealhamed/Lmonitor/releases) · [Report a bug](https://github.com/unrealhamed/Lmonitor/issues/new?template=bug_report.md) · [Request a feature](https://github.com/unrealhamed/Lmonitor/issues/new?template=feature_request.md)
 
-> **Status: early release (v1.18.3).** Tested by the author on one Windows 11 laptop (NVIDIA RTX 4070 Laptop GPU + Intel Core i7-12700H). Some sensors may show `n/a` on other hardware. Bug reports are welcome.
+> **Status: early release (v1.19.1).** Tested by the author on one Windows 11 laptop (NVIDIA RTX 4070 Laptop GPU + Intel Core i7-12700H). Some sensors may show `n/a` on other hardware. Bug reports are welcome.
 
 ## Screenshots
 
-![Lmonitor home page: CPU, GPU, RAM and storage cards, a performance chart and the overlay preview](docs/screenshots/dashboard.png)
+![Lmonitor home page (dark): CPU, GPU, memory and storage cards, the performance chart, Right now, Network and This PC](docs/screenshots/dashboard.png)
 
 | Graph overlay (gaming HUD) | Graph overlay settings |
 |---|---|
-| ![Graph overlay: four live charts - GPU temperature, GPU usage, CPU usage and RAM usage - in the Neon gaming HUD style](docs/screenshots/graph-overlay-hud.png) | ![Graph overlay page: live preview, chart picker, time span, position, color themes, size and layout](docs/screenshots/graph-overlay.png) |
+| ![Graph overlay: four live charts - FPS, frame time, GPU temperature and CPU temperature - in the Neon gaming HUD style](docs/screenshots/graph-overlay-hud.png) | ![Graph overlay page: live preview, chart picker, time span, position, color themes, size and layout](docs/screenshots/graph-overlay.png) |
 
 | Graphs (real time) | Overlay settings |
 |---|---|
 | ![Graphs page: CPU and GPU temperature, RAM, CPU and GPU usage, download and fan speed in real time](docs/screenshots/graphs.png) | ![Overlay page: live preview of the bar, density, position, appearance and the metrics it shows](docs/screenshots/overlay-settings.png) |
 
-![Personalize page: start with Windows, interface size, corners, font, ten app themes and accent colors](docs/screenshots/personalize.png)
+| Personalize | Light mode |
+|---|---|
+| ![Personalize page: language, start with Windows, light or dark, six accent colors and interface size](docs/screenshots/personalize.png) | ![Home page in the light mode](docs/screenshots/dashboard-light.png) |
 
 ## Download and install
 
@@ -52,8 +54,8 @@ Values turn from white to warning colors with load and temperature (these limits
 | Critical | 70 % and up - dark red | 75 °C and up - dark red |
 
 ### Customize the overlay
-- **Two styles:** *Dark Transparent* and *Liquid Glass* (Windows blur-behind; needs Windows 10 version 1803 or newer, otherwise a translucent dark bar is used).
-- **10 backgrounds**, 6 value colors, **opacity**, **text size**, regular/bold weights.
+- **One look, made to be read over any game:** a dark, see-through bar; set its **opacity** and **text size**. (The glass style, background and value colors and the regular / bold choices were removed in 1.19.0 to keep it simple.)
+- **Warnings stand out:** values turn yellow / red when temperatures or load get high.
 - **Layout:** horizontal or vertical. **Position:** Left, Center, Right or custom - drag the bar with the mouse; the position is saved and kept inside the screen.
 - **Order:** reorder the sections.
 - **F9 mode:** instead of staying on screen, the bar can slide down from the top edge when you press **F9** (it works while a game has focus), stay for 3 / 5 / 10 seconds, then slide back. F9 is not blocked, so a game that uses F9 still sees the key.
@@ -89,7 +91,7 @@ Not measured yet: the effect on FPS inside real games (please report what you se
 
 ## The window
 
-- **Home:** CPU / GPU / RAM / Storage cards with status words, a performance chart (real time or 1 minute), network, switches for the overlay and the graph overlay, and a *Right now* box: the game in front, its frame rate, the session recorder, your last session and the safe-mode state.
+- **Home:** four cards (CPU and GPU with usage, clock, power and a temperature gauge; memory; free storage), a performance chart (real time or 1 minute), *Right now* (the game in front, its frame rate, the session recorder, your last session, safe mode), **Network** (download, upload, since start-up, a link to the usage history) and **This PC** (up time, battery, power plan and your PC check score), plus switches for the overlay and the graph overlay.
 - **Network usage** (click the *Network* card on Home): how much you downloaded and uploaded in the last 1, 15 or 30 days - a bar per day; click a day to see it hour by hour, click an hour to see which programs used how much. The numbers are Windows' own records (the same as Settings > Network > Data usage, kept 30 - 60 days, so days before Lmonitor was installed show too), read only while the page is open. Windows sometimes writes them hours late; for the time after its newest record Lmonitor shows its own count (*Measured by Lmonitor*, read once a minute from the network adapters - totals only). Only real adapters count, so traffic through a VPN is not counted twice.
 - **Graphs** and **Hardware:** live charts (real time or 1 minute; click one to enlarge it and put other lines on the same chart) and detailed CPU, GPU, memory, storage, network and system information.
 - **Overlay:** every overlay setting above, with a live preview.
@@ -99,7 +101,7 @@ Not measured yet: the effect on FPS inside real games (please report what you se
 - **Optimizer:** safe, reversible changes - nothing happens without a second confirming click. Startup programs, power plans, *Gaming* and *Daily* presets (they show what they would change first), and old files in the Windows temp folders. Every change shows before / after and has an **Undo** (temp cleaning cannot be undone and says so). Lmonitor does not disable services, edit the registry in bulk, or overclock.
 - **Storage:** shows what takes space. Cleanup measures known cache/temp folders and shows how much can be freed *before* deleting anything. Big folders and large files are only listed and shown in Explorer.
 - **Updates:** Lmonitor looks for a new version when it starts and every 3 hours. When one is out, a bar appears on every page (*Install now* / *Later*) and a message next to the clock - no need to press *Check for updates*.
-- **Personalize:** 10 app themes (dark, light, OLED black, and colored ones), 17 accent colors including your own color from a color bar, interface and text size (90 - 120 %), corner style, 6 fonts, the language (**English** or **Persian / فارسی** - in Persian the whole window is right-to-left and Lmonitor's own texts are translated; numbers stay in Latin digits), and **Start with Windows**: Lmonitor starts when you sign in and waits in the tray with the overlays ready (it uses a Windows Task Scheduler task, so there is no administrator question at each start; uninstalling removes it).
+- **Personalize:** **Light or Dark** (one design, made for both), six accent colors, interface size (100 / 110 / 125 %), the language (**English** or **Persian / فارسی** - in Persian the whole window is right-to-left and Lmonitor's own texts are translated; numbers stay in Latin digits), and **Start with Windows**: Lmonitor starts when you sign in and waits in the tray with the overlays ready (it uses a Windows Task Scheduler task, so there is no administrator question at each start; uninstalling removes it). Settings of older versions move over by themselves.
 - **Tray icon:** closing the window keeps the overlay running; the tray icon opens the window, switches the overlay or exits.
 
 Everything is saved automatically in `%APPDATA%\Lmonitor\settings.json`.

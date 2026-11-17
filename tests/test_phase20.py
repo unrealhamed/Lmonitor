@@ -20,13 +20,17 @@ chk("set_density balanced", b.set_density("balanced") and b.density() == "balanc
 chk("unknown density refused", not b.set_density("x"))
 b.set_show("fps", False)
 chk("manual change -> custom", b.density() == "")
-d = b.ui_style("default", "auto")
-chk("default theme = Qt palette + green", d["bg0"] == "#08080a" and d["accent"] == "#1fd18b")
-for t in ("night", "day", "aurora"):
-    u = b.ui_style(t, "blue")
-    chk(t + " theme complete + blue accent", all(k in u for k in ("bg0","bg1","card","cardHi","line","text","sub","dim","accent","accentText","light")))
-chk("day is light", b.ui_style("day", "auto")["light"] is True)
-chk("aurora auto accent", b.ui_style("aurora", "auto")["accent"] == "#2ee6c5")
-b.set_setting("ui_theme", "night"); b.set_setting("ui_accent", "pink")
-chk("settings stored (shared with Tk)", b.settings["ui_theme"] == "night" and b.settings["ui_accent"] == "pink")
+# 1.19: one design ("Slate") in two modes
+d = b.ui_style("dark", "mint")
+chk("dark mode + mint", d["bg0"] == "#0E1014" and d["accent"] == "#2DD4A0" and d["light"] is False)
+for m in ("dark", "light"):
+    u = b.ui_style(m, "blue")
+    chk(m + " mode complete + blue accent", all(k in u for k in ("bg0","bg1","card","raised","line","lineStrong","text","sub",
+                                                             "dim","accent","accentHover","accentText","warn","danger","info","light")))
+chk("light mode is light, accent darker for white", b.ui_style("light", "mint")["light"] is True
+    and b.ui_style("light", "mint")["accent"] == "#047857")
+b.set_setting("ui_mode", "light"); b.set_setting("ui_accent", "pink")
+chk("settings stored", b.settings["ui_mode"] == "light" and b.settings["ui_accent"] == "pink")
+b.set_setting("ui_mode", "sepia"); b.set_setting("ui_accent", "gold")
+chk("unknown mode / accent fall back", b.settings["ui_mode"] == "dark" and b.settings["ui_accent"] == "mint")
 print("phase20: %d ok, %d failed" % (ok, bad))

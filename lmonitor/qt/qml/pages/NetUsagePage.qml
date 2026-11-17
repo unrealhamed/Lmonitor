@@ -121,6 +121,11 @@ Item {
                         height: Math.max(parent.b.up > 0 ? 2 : 0, (parent.height - 18) * (parent.b.up || 0))
                         y: downBar.y - height; color: page.cUp
                     }
+                    Text { visible: dayPlot.slot >= 46 && (parent.b.down > 0 || parent.b.up > 0)
+                           anchors.horizontalCenter: parent.horizontalCenter
+                           y: Math.max(0, parent.height - (parent.height - 18) * ((parent.b.down || 0) + (parent.b.up || 0)) - 16)
+                           text: parent.b.text || ""; color: parent.b.sel ? Tokens.text : Tokens.sub
+                           font.family: Tokens.font; font.pixelSize: 10; font.bold: parent.b.sel === true }
                     Text { anchors.horizontalCenter: parent.horizontalCenter; y: parent.height + 4
                            text: dayPlot.bars.length > 15 ? String(parent.b.day || "") : (parent.b.label || "")
                            color: parent.b.sel ? Tokens.text : Tokens.dim
@@ -151,48 +156,44 @@ Item {
         Text { x: 18; y: 34; text: Tr.line(Tr.t("Used: ") + (page.d.dayTotal || "--") + "   ↓ " + (page.d.dayDown || "--")
                                           + "   ↑ " + (page.d.dayUp || "--"))
                color: Tokens.sub; font.family: Tokens.font; font.pixelSize: Tokens.fsBody }
-        Text { x: 18; y: 54; text: Tr.t("Per hour - click an hour to see its programs"); color: Tokens.dim
+        Text { x: 18; y: 54; text: Tr.t("Hours of this day - click one to see its programs"); color: Tokens.dim
                font.family: Tokens.font; font.pixelSize: Tokens.fsSmall }
-        Item {
-            id: hourPlot
-            x: 18; y: 84; width: parent.width * 0.56 - 18; height: parent.height - 84 - 34
-            readonly property var hrs: page.d.hours || []
-            readonly property real slot: width / 24
-            Repeater { model: 3
-                       Rectangle { width: hourPlot.width; height: 1; color: Tokens.line
-                                   y: Math.round(index * (hourPlot.height - 1) / 2) } }
-            Repeater {
-                model: 24
-                Item {
-                    readonly property var h: hourPlot.hrs[index] || ({})
-                    readonly property bool sel: page.d.hour === index
-                    x: index * hourPlot.slot; width: hourPlot.slot; height: hourPlot.height
-                    Rectangle { anchors.fill: parent; anchors.margins: 1; radius: 3
-                                color: parent.sel ? Tokens.accentA(0.16) : hourMouse.containsMouse ? Tokens.fg(0.06) : "transparent"
-                                border.width: parent.sel ? 1 : 0; border.color: Tokens.accent }
-                    Rectangle { id: hDown; x: parent.width * 0.18; width: parent.width * 0.64; radius: 2
-                                height: Math.max(parent.h.down > 0 ? 2 : 0, (parent.height - 6) * (parent.h.down || 0))
-                                y: parent.height - height; color: page.cDown }
-                    Rectangle { x: hDown.x; width: hDown.width; radius: 2
-                                height: Math.max(parent.h.up > 0 ? 2 : 0, (parent.height - 6) * (parent.h.up || 0))
-                                y: hDown.y - height; color: page.cUp }
-                    Text { visible: index % 3 === 0; anchors.horizontalCenter: parent.horizontalCenter; y: parent.height + 4
-                           text: String(index); color: parent.sel ? Tokens.text : Tokens.dim
-                           font.family: Tokens.font; font.pixelSize: 10 }
-                    MouseArea { id: hourMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                onClicked: backend.netUsageHour(index) }
-                    Rectangle {
-                        visible: hourMouse.containsMouse; z: 5
-                        width: htip.implicitWidth + 16; height: 24; radius: 6; color: Tokens.cardHi
-                        border.width: 1; border.color: Tokens.line
-                        x: Math.max(-parent.x, Math.min(hourPlot.width - parent.x - width, (parent.width - width) / 2)); y: -26
-                        Text { id: htip; anchors.centerIn: parent; color: Tokens.text; font.family: Tokens.font; font.pixelSize: Tokens.fsSmall
-                               text: Tr.line(("0" + index).slice(-2) + ":00-" + ("0" + ((index + 1) % 24)).slice(-2) + ":00  "
-                                             + (parent.parent.h.empty ? Tr.t("nothing") : (parent.parent.h.text || ""))) }
-                    }
-                }
+        // one row per hour that had traffic, in time order: easy to read ("16:00 - 17:00 . 4 PM . 120 MB")
+        ListView {
+            id: hourList
+            x: 18; y: 78; width: parent.width * 0.56 - 18; height: parent.height - 78 - 12
+            clip: true; spacing: 4; boundsBehavior: Flickable.StopAtBounds
+            model: (page.d.usedHours || []).length + 1          // first row: the whole day
+            delegate: Rectangle {
+                id: hr
+                readonly property bool whole: index === 0
+                readonly property var h: whole ? ({}) : (page.d.usedHours[index - 1] || ({}))
+                readonly property bool sel: whole ? page.d.hour < 0 : page.d.hour === h.h
+                width: ListView.view.width; height: whole ? 40 : 46; radius: 8
+                color: sel ? Tokens.accentA(0.16) : hrMouse.containsMouse ? Tokens.fg(0.06) : Tokens.fg(0.025)
+                border.width: sel ? 1 : 0; border.color: Tokens.accent
+                Text { x: 12; y: hr.whole ? 11 : 6; color: Tokens.text; font.family: Tokens.font
+                       font.pixelSize: Tokens.fsBody; font.bold: true
+                       text: hr.whole ? Tr.t("Whole day") : Tr.line(hr.h.range || "") }
+                Text { x: 118; y: 7; visible: !hr.whole; color: hr.h.now ? Tokens.accent : Tokens.sub
+                       font.family: Tokens.font; font.pixelSize: Tokens.fsSmall
+                       text: Tr.line((hr.h.clock || "") + (hr.h.now ? "  ·  " + Tr.t("now") : "")) }
+                Text { anchors.right: parent.right; anchors.rightMargin: 12; y: hr.whole ? 11 : 6
+                       color: Tokens.text; font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: true
+                       text: hr.whole ? (page.d.dayTotal || "--") : (hr.h.text || "") }
+                Rectangle { visible: !hr.whole; x: 12; y: 27; width: parent.width - 150; height: 5; radius: 3; color: Tokens.track
+                            Rectangle { width: Math.max(3, parent.width * (hr.h.frac || 0)); height: parent.height; radius: 3
+                                        color: page.cDown } }
+                Text { visible: !hr.whole; anchors.right: parent.right; anchors.rightMargin: 12; y: 25
+                       color: Tokens.dim; font.family: Tokens.font; font.pixelSize: 10
+                       text: Tr.line("↓ " + (hr.h.down || "") + "   ↑ " + (hr.h.up || "")) }
+                MouseArea { id: hrMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                            onClicked: hr.whole ? backend.netUsageHour(-1) : backend.netUsageHour(hr.h.h) }
             }
         }
+        Text { visible: page.ready && (page.d.usedHours || []).length === 0; x: 18; y: 140
+               width: parent.width * 0.56 - 18; horizontalAlignment: Text.AlignHCenter; color: Tokens.dim
+               text: Tr.t("Nothing was used in this time"); font.family: Tokens.font; font.pixelSize: Tokens.fsBody }
         // programs of the day (or of the chosen hour)
         Item {
             x: parent.width * 0.56 + 12; y: 12; width: parent.width * 0.44 - 30; height: parent.height - 24

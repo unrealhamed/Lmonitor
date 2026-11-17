@@ -2,196 +2,125 @@ import QtQuick
 import Lmonitor
 import "../components"
 
-// How Lmonitor itself looks: language, size, corners, font, app theme and accent color.
+// How Lmonitor looks: language, start with Windows, light or dark, accent color, size.
 Item {
     id: page
     readonly property var s: backend.settings
     readonly property int g: Tokens.gap
-    function onDark(hex) {              // readable text color on a swatch
-        return (parseInt(hex.substr(1, 2), 16) * 0.299 + parseInt(hex.substr(3, 2), 16) * 0.587
-                + parseInt(hex.substr(5, 2), 16) * 0.114) > 140 ? "#10131a" : "#ffffff"
-    }
     PageHeader {
         id: head; width: parent.width; kicker: Tr.t("Look and feel"); title: Tr.t("Personalize")
-        Text { anchors.verticalCenter: parent.verticalCenter; text: Tr.t("Language"); color: Tokens.sub
+        Text { anchors.verticalCenter: parent.verticalCenter; text: Tr.t("Language"); color: Tokens.dim
                font.family: Tokens.font; font.pixelSize: Tokens.fsBody }
         Segmented { width: 200; model: ["English", "فارسی"]; index: page.s.language === "fa" ? 1 : 0
                     onPicked: function (i) { backend.setSetting("language", i === 1 ? "fa" : "en") } }
     }
 
-    Flickable {
-        y: head.height + 12; width: parent.width; height: parent.height - y
-        contentWidth: width; contentHeight: col.height + 8; clip: true; boundsBehavior: Flickable.StopAtBounds
-        Column {
-            id: col; width: parent.width; spacing: page.g
+    Column {
+        y: head.height + 12; width: parent.width; spacing: page.g
 
-            Card {                                          // ---- start with Windows
-                width: parent.width; height: 96
-                Text { x: 20; y: 16; text: Tr.t("Start with Windows"); color: Tokens.text
-                       font.family: Tokens.font; font.pixelSize: 16; font.bold: true }
-                Text { x: 20; y: 44; width: parent.width - 120; wrapMode: Text.WordWrap
-                       color: backend.autostartError !== "" ? Tokens.warn : Tokens.sub
-                       font.family: Tokens.font; font.pixelSize: Tokens.fsSmall
-                       text: backend.autostartError !== "" ? Tr.t("Could not change it: ") + Tr.t(backend.autostartError)
-                             : Tr.t("Lmonitor starts by itself when you sign in to Windows and waits in the tray next to the clock, with the overlays ready. No question from Windows each time.") }
-                ToggleSwitch { anchors.right: parent.right; anchors.rightMargin: 20; y: 20; checked: backend.autostart
-                               onToggled: function (v) { backend.setAutostart(v) } }
+        Card {                                          // ---- start with Windows
+            width: parent.width; height: 78
+            Text { x: 20; y: 18; text: Tr.t("Start with Windows"); color: Tokens.text
+                   font.family: Tokens.font; font.pixelSize: Tokens.fsHead; font.weight: Font.DemiBold }
+            Text { x: 20; y: 42; width: parent.width - 120; elide: Text.ElideRight
+                   color: backend.autostartError !== "" ? Tokens.warn : Tokens.sub
+                   font.family: Tokens.font; font.pixelSize: 12
+                   text: backend.autostartError !== "" ? Tr.t("Could not change it: ") + Tr.t(backend.autostartError)
+                         : Tr.t("Lmonitor starts when you sign in and waits in the tray with the overlays ready.") }
+            ToggleSwitch { anchors.right: parent.right; anchors.rightMargin: 20; anchors.verticalCenter: parent.verticalCenter
+                           checked: backend.autostart; onToggled: function (v) { backend.setAutostart(v) } }
+        }
+
+        Card {                                          // ---- light / dark
+            width: parent.width; height: 254
+            Text { x: 20; y: 18; text: Tr.t("Appearance"); color: Tokens.text
+                   font.family: Tokens.font; font.pixelSize: Tokens.fsHead; font.weight: Font.DemiBold }
+            Text { x: 20; y: 42; text: Tr.t("The same design in two modes. The in-game overlays always stay dark.")
+                   color: Tokens.sub; font.family: Tokens.font; font.pixelSize: 12 }
+            Row {
+                x: 20; y: 72; width: parent.width - 40; spacing: page.g
+                Repeater {
+                    model: [{key: "light", name: "Light", icon: "", bg: "#F3F4F6", side: "#FFFFFF", card: "#FFFFFF",
+                             line: "#E3E6EA", bar: "#047857", dimc: "#D2D7DE"},
+                            {key: "dark", name: "Dark", icon: "", bg: "#0E1014", side: "#15181D", card: "#15181D",
+                             line: "#252A32", bar: "#2DD4A0", dimc: "#333944"}]
+                    Rectangle {
+                        id: mode
+                        readonly property bool on: page.s.ui_mode === modelData.key
+                        width: (parent.width - page.g) / 2; height: 162; radius: 12
+                        color: Tokens.bg0
+                        border.width: on ? 2 : 1; border.color: on ? Tokens.accent : (modeMouse.containsMouse ? Tokens.lineStrong : Tokens.line)
+                        Rectangle {                    // a small window in that mode
+                            x: 10; y: 10; width: parent.width - 20; height: 108; radius: 8
+                            color: modelData.bg; border.width: 1; border.color: modelData.line; clip: true
+                            Rectangle { x: 1; y: 1; width: parent.width * 0.3; height: parent.height - 2; color: modelData.side
+                                        Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: modelData.line }
+                                        Column { x: 10; y: 12; spacing: 7
+                                                 Rectangle { width: 46; height: 6; radius: 3; color: modelData.bar }
+                                                 Rectangle { width: 36; height: 5; radius: 3; color: modelData.dimc }
+                                                 Rectangle { width: 42; height: 5; radius: 3; color: modelData.dimc } } }
+                            Column { x: parent.width * 0.3 + 10; y: 10; width: parent.width * 0.7 - 20; spacing: 8
+                                     Rectangle { width: parent.width; height: 40; radius: 6; color: modelData.card; border.width: 1; border.color: modelData.line }
+                                     Rectangle { width: parent.width; height: 40; radius: 6; color: modelData.card; border.width: 1; border.color: modelData.line } }
+                        }
+                        Row { x: 14; y: 130; spacing: 8
+                              Text { text: modelData.icon; color: Tokens.text; font.family: Tokens.iconFont; font.pixelSize: 15
+                                     anchors.verticalCenter: parent.verticalCenter }
+                              Text { text: Tr.t(modelData.name); color: Tokens.text; anchors.verticalCenter: parent.verticalCenter
+                                     font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.weight: Font.DemiBold } }
+                        Rectangle { anchors.right: parent.right; anchors.rightMargin: 14; y: 131; width: 18; height: 18; radius: 9
+                                    color: "transparent"; border.width: 2; border.color: mode.on ? Tokens.accent : Tokens.lineStrong
+                                    Rectangle { anchors.centerIn: parent; width: 8; height: 8; radius: 4; color: Tokens.accent; visible: mode.on } }
+                        MouseArea { id: modeMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                    onClicked: backend.setSetting("ui_mode", modelData.key) }
+                    }
+                }
             }
+        }
 
-            Card {                                          // ---- size, corners, font
-                width: parent.width; height: 196
-                Text { x: 20; y: 16; text: Tr.t("Window"); color: Tokens.text
-                       font.family: Tokens.font; font.pixelSize: 16; font.bold: true }
+        Row {
+            width: parent.width; spacing: page.g
+            Card {                                      // ---- accent
+                width: (parent.width - page.g) / 2; height: 148
+                Text { x: 20; y: 18; text: Tr.t("Accent color"); color: Tokens.text
+                       font.family: Tokens.font; font.pixelSize: Tokens.fsHead; font.weight: Font.DemiBold }
+                Text { x: 20; y: 42; text: Tr.t("Used for switches, selections and main buttons."); color: Tokens.sub
+                       font.family: Tokens.font; font.pixelSize: 12 }
                 Row {
-                    x: 20; y: 52; width: parent.width - 40; spacing: 20
-                    Column {
-                        width: (parent.width - 40) / 3; spacing: 8
-                        Text { text: Tr.t("INTERFACE AND TEXT SIZE"); color: Tokens.sub
-                               font.family: Tokens.font; font.pixelSize: Tokens.fsSmall; font.bold: true }
-                        Segmented { width: parent.width
-                                    model: backend.uiScales.map(function (v) { return v + "%" })
-                                    index: backend.uiScales.indexOf(page.s.ui_scale)
-                                    onPicked: function (i) { backend.setSetting("ui_scale", backend.uiScales[i]) } }
-                        Text { width: parent.width; wrapMode: Text.WordWrap; color: Tokens.dim
-                               font.family: Tokens.font; font.pixelSize: Tokens.fsSmall
-                               text: Tr.t("Makes all text and controls bigger or smaller.") }
-                    }
-                    Column {
-                        width: (parent.width - 40) / 3; spacing: 8
-                        Text { text: Tr.t("CORNERS"); color: Tokens.sub
-                               font.family: Tokens.font; font.pixelSize: Tokens.fsSmall; font.bold: true }
-                        Segmented { width: parent.width; model: ["Sharp", "Soft", "Round"]
-                                    index: ["sharp", "soft", "round"].indexOf(page.s.ui_radius)
-                                    onPicked: function (i) { backend.setSetting("ui_radius", ["sharp", "soft", "round"][i]) } }
-                    }
-                    Column {
-                        width: (parent.width - 40) / 3; spacing: 8
-                        Text { text: Tr.t("FONT"); color: Tokens.sub
-                               font.family: Tokens.font; font.pixelSize: Tokens.fsSmall; font.bold: true }
-                        Flow {
-                            width: parent.width; spacing: 6
-                            Repeater {
-                                model: backend.uiFonts
-                                Rectangle {
-                                    readonly property bool on: page.s.ui_font === modelData
-                                    width: fl.width + 20; height: 30; radius: 9
-                                    color: on ? Tokens.accentA(0.20) : Tokens.fg(0.05)
-                                    border.width: 1; border.color: on ? Tokens.accent : Tokens.line
-                                    Text { id: fl; anchors.centerIn: parent; text: modelData; color: Tokens.text
-                                           font.family: modelData; font.pixelSize: Tokens.fsBody }
-                                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                                                onClicked: backend.setSetting("ui_font", modelData) }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            Card {                                          // ---- themes
-                id: themes
-                readonly property int cols: width > 1000 ? 5 : width > 760 ? 4 : 3
-                readonly property real tileW: (width - 40 - (cols - 1) * 14) / cols
-                width: parent.width
-                height: 62 + Math.ceil(backend.uiThemes.length / cols) * 132
-                Text { x: 20; y: 16; text: Tr.t("App theme"); color: Tokens.text
-                       font.family: Tokens.font; font.pixelSize: 16; font.bold: true }
-                Grid {
-                    x: 20; y: 52; columns: themes.cols; spacing: 14
+                    x: 20; y: 74; spacing: 14
                     Repeater {
-                        model: backend.uiThemes
-                        Item {
-                            width: themes.tileW; height: 118
-                            Rectangle {                      // mini window made from the theme's own colors
-                                width: parent.width; height: 78; radius: 12
-                                color: modelData.bg0
-                                border.width: s.ui_theme === modelData.key ? 2 : 1
-                                border.color: s.ui_theme === modelData.key ? Tokens.accent : modelData.line
-                                Rectangle { x: 1; y: 1; width: 38; height: parent.height - 2; radius: 11; color: modelData.bg1 }
-                                Rectangle { x: 7; y: 12; width: 26; height: 5; radius: 3; color: modelData.accent }
-                                Rectangle { x: 7; y: 24; width: 20; height: 4; radius: 2; color: modelData.dim }
-                                Rectangle { x: 7; y: 34; width: 24; height: 4; radius: 2; color: modelData.dim }
-                                Rectangle { x: 48; y: 10; width: parent.width - 58; height: 26; radius: 7; color: modelData.card
-                                            border.width: 1; border.color: modelData.line
-                                            Rectangle { x: 8; y: 7; width: 34; height: 5; radius: 3; color: modelData.text }
-                                            Rectangle { x: 8; y: 16; width: 50; height: 4; radius: 2; color: modelData.sub } }
-                                Rectangle { x: 48; y: 42; width: parent.width - 58; height: 26; radius: 7; color: modelData.card
-                                            border.width: 1; border.color: modelData.line
-                                            Rectangle { x: 8; y: 10; width: parent.width - 16; height: 5; radius: 3; color: modelData.line }
-                                            Rectangle { x: 8; y: 10; width: (parent.width - 16) * 0.6; height: 5; radius: 3; color: modelData.accent } }
-                            }
-                            Text { y: 82; text: Tr.t(modelData.name); color: Tokens.text
-                                   font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: true }
-                            Text { y: 99; width: parent.width; elide: Text.ElideRight; text: Tr.t(modelData.note); color: Tokens.dim
-                                   font.family: Tokens.font; font.pixelSize: Tokens.fsSmall }
-                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                                        onClicked: backend.setSetting("ui_theme", modelData.key) }
-                        }
-                    }
-                }
-            }
-
-            Card {                                          // ---- accent
-                width: parent.width; height: acc.height + 70
-                Text { x: 20; y: 16; text: Tr.t("Accent color"); color: Tokens.text
-                       font.family: Tokens.font; font.pixelSize: 16; font.bold: true }
-                Column {
-                    id: acc
-                    x: 20; y: 52; width: parent.width - 40; spacing: 12
-                    Flow {
-                        width: parent.width; spacing: 10
-                        Repeater {
-                            model: backend.uiAccents
+                        model: backend.uiAccents
+                        Column {
+                            spacing: 6
+                            readonly property bool on: page.s.ui_accent === modelData.key
                             Rectangle {
-                                readonly property string hex: modelData.key === "custom" ? backend.hueHex(page.s.ui_hue) : modelData.hex
-                                width: 78; height: 40; radius: 12
-                                color: hex !== "" ? hex : Tokens.fg(0.08)
-                                border.width: s.ui_accent === modelData.key ? 3 : 1
-                                border.color: s.ui_accent === modelData.key ? Tokens.text : Tokens.line
-                                Text { anchors.centerIn: parent; text: Tr.t(modelData.name); font.bold: true
-                                       font.family: Tokens.font; font.pixelSize: Tokens.fsSmall
-                                       color: parent.hex !== "" ? page.onDark(parent.hex) : Tokens.text }
+                                width: 36; height: 36; radius: 18; color: modelData.hex
+                                border.width: parent.on ? 2 : 0; border.color: Tokens.card
+                                Rectangle { anchors.fill: parent; anchors.margins: -3; radius: width / 2; color: "transparent"
+                                            border.width: 2; border.color: Tokens.text; visible: parent.parent.on }
+                                Text { anchors.centerIn: parent; visible: parent.parent.on; text: ""
+                                       color: Tokens.accentText; font.family: Tokens.iconFont; font.pixelSize: 14 }
                                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
                                             onClicked: backend.setSetting("ui_accent", modelData.key) }
                             }
+                            Text { anchors.horizontalCenter: parent.horizontalCenter; text: Tr.t(modelData.name)
+                                   color: parent.on ? Tokens.text : Tokens.dim
+                                   font.family: Tokens.font; font.pixelSize: 11 }
                         }
                     }
-                    Item {                                   // custom: any hue
-                        width: Math.min(parent.width, 560); height: 44
-                        Text { text: Tr.t("YOUR OWN COLOR"); color: Tokens.sub
-                               font.family: Tokens.font; font.pixelSize: Tokens.fsSmall; font.bold: true }
-                        Rectangle {
-                            id: hueBar
-                            y: 22; width: parent.width; height: 14; radius: 7
-                            gradient: Gradient {
-                                orientation: Gradient.Horizontal
-                                GradientStop { position: 0.000; color: backend.hueHex(0) }
-                                GradientStop { position: 0.167; color: backend.hueHex(60) }
-                                GradientStop { position: 0.333; color: backend.hueHex(120) }
-                                GradientStop { position: 0.500; color: backend.hueHex(180) }
-                                GradientStop { position: 0.667; color: backend.hueHex(240) }
-                                GradientStop { position: 0.833; color: backend.hueHex(300) }
-                                GradientStop { position: 1.000; color: backend.hueHex(359) }
-                            }
-                            Rectangle { width: 20; height: 20; radius: 10; y: -3; color: backend.hueHex(page.s.ui_hue)
-                                        border.width: 3; border.color: "white"
-                                        x: page.s.ui_hue / 359 * (hueBar.width - width) }
-                            MouseArea {
-                                anchors.fill: parent; anchors.margins: -8
-                                function pick(mx) {
-                                    var h = Math.round(Math.max(0, Math.min(1, (mx - 8) / hueBar.width)) * 359)
-                                    if (h !== page.s.ui_hue) backend.setSetting("ui_hue", h)
-                                    if (page.s.ui_accent !== "custom") backend.setSetting("ui_accent", "custom")
-                                }
-                                onPressed: function (m) { pick(m.x) }
-                                onPositionChanged: function (m) { if (pressed) pick(m.x) }
-                            }
-                        }
-                    }
-                    Text { width: parent.width; wrapMode: Text.WordWrap; color: Tokens.dim
-                           font.family: Tokens.font; font.pixelSize: Tokens.fsSmall
-                           text: Tr.t("Auto = the theme's own color.") }
                 }
+            }
+            Card {                                      // ---- interface size
+                width: (parent.width - page.g) / 2; height: 148
+                Text { x: 20; y: 18; text: Tr.t("Interface size"); color: Tokens.text
+                       font.family: Tokens.font; font.pixelSize: Tokens.fsHead; font.weight: Font.DemiBold }
+                Text { x: 20; y: 42; text: Tr.t("Makes all text and controls bigger, for high-resolution screens.")
+                       width: parent.width - 40; elide: Text.ElideRight
+                       color: Tokens.sub; font.family: Tokens.font; font.pixelSize: 12 }
+                Segmented { x: 20; y: 80; width: parent.width - 40
+                            model: backend.uiScales.map(function (v) { return v + "%" })
+                            index: backend.uiScales.indexOf(page.s.ui_scale)
+                            onPicked: function (i) { backend.setSetting("ui_scale", backend.uiScales[i]) } }
             }
         }
     }

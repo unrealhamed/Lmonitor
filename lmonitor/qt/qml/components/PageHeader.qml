@@ -10,12 +10,12 @@ Item {
     default property alias extras: rightSide.data
     height: 58
     Column {
-        anchors.verticalCenter: parent.verticalCenter; spacing: 0
-        Text { text: Tr.t(root.kicker); color: Tokens.sub; visible: text !== ""
-               font.family: Tokens.font; font.pixelSize: Tokens.fsBody }
+        anchors.verticalCenter: parent.verticalCenter; spacing: 1
+        Text { text: Tr.t(root.kicker); color: Tokens.dim; visible: text !== ""
+               font.family: Tokens.font; font.pixelSize: 13 }
         Text { text: Tr.t(root.title); color: Tokens.text
-               font.family: Tokens.font; font.pixelSize: 30; font.bold: true }
+               font.family: Tokens.fontDisplay; font.pixelSize: Tokens.fsTitle; font.weight: Font.DemiBold }
     }
     Row { id: rightSide; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-          spacing: 14 }
+          spacing: 12 }
 }

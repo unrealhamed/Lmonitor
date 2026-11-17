@@ -90,7 +90,7 @@ Item {
                         Item {
                             width: parent.width; height: 40
                             Rectangle { y: 14; width: 12; height: 12; radius: 6; color: modelData.active ? Tokens.accent : "transparent"
-                                        border.width: 1; border.color: modelData.active ? Tokens.accent : Tokens.line }
+                                        border.width: 1; border.color: modelData.active ? Tokens.accentA(0.0) : Tokens.line }
                             Text { x: 24; anchors.verticalCenter: parent.verticalCenter; text: Tr.t(modelData.name); color: Tokens.text
                                    font.family: Tokens.font; font.pixelSize: 14; font.bold: modelData.active }
                             ConfirmButton { visible: !modelData.active; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter

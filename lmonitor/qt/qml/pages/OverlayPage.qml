@@ -107,72 +107,15 @@ Item {
                             onMoved: function (v) { backend.setSetting("text", v) } }
             }
             Card {
-                width: parent.width; height: apCol.height + 36
-                Column {
-                    id: apCol
-                    x: 20; y: 16; width: parent.width - 40; spacing: 14
-                    Text { text: Tr.t("Appearance"); color: Tokens.text
-                           font.family: Tokens.font; font.pixelSize: 16; font.bold: true }
-                    Segmented { width: parent.width
-                                model: ["Dark transparent", Tr.t("Liquid glass")]
-                                index: s.look === "glass" ? 1 : 0
-                                onPicked: function (i) { backend.setSetting("look", i === 1 ? "glass" : "dark") } }
-                    Text { visible: s.look === "glass"; width: parent.width; wrapMode: Text.WordWrap
-                           text: backend.glassOk ? Tr.t("Glass blurs the game behind the bar (visible in the game, not in this preview).")
-                                                 : Tr.t("Windows blur is not available - a translucent bar is used.")
-                           color: backend.glassOk ? Tokens.dim : Tokens.warn
-                           font.family: Tokens.font; font.pixelSize: Tokens.fsSmall }
-                    SliderRow { width: parent.width; label: Tr.t("OPACITY"); unit: "%"
-                                from: 40; to: 100; step: 5; value: s.alpha
-                                onMoved: function (v) { backend.setSetting("alpha", v) } }
-                    Text { text: Tr.t("BACKGROUND"); color: Tokens.sub
-                           font.family: Tokens.font; font.pixelSize: Tokens.fsSmall; font.bold: true }
-                    Flow {
-                        width: parent.width; spacing: 8
-                        Repeater {
-                            model: backend.backgrounds
-                            Rectangle {
-                                width: 44; height: 30; radius: 8; color: modelData.hex
-                                border.width: s.bg === modelData.key ? 2 : 1
-                                border.color: s.bg === modelData.key ? Tokens.accent : Tokens.line
-                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                                            onClicked: backend.setSetting("bg", modelData.key) }
-                            }
-                        }
-                    }
-                    Text { text: Tr.t("VALUE COLOR"); color: Tokens.sub
-                           font.family: Tokens.font; font.pixelSize: Tokens.fsSmall; font.bold: true }
-                    Flow {
-                        width: parent.width; spacing: 8
-                        Repeater {
-                            model: backend.valueColors
-                            Rectangle {
-                                width: 30; height: 30; radius: 15; color: modelData.hex
-                                border.width: s.value_color === modelData.key ? 3 : 0
-                                border.color: "white"
-                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                                            onClicked: backend.setSetting("value_color", modelData.key) }
-                            }
-                        }
-                    }
-                    Row {
-                        width: parent.width; spacing: 16
-                        Column {
-                            width: (parent.width - 16) / 2; spacing: 8
-                            Text { text: Tr.t("VALUES"); color: Tokens.sub
-                                   font.family: Tokens.font; font.pixelSize: Tokens.fsSmall; font.bold: true }
-                            Segmented { width: parent.width; model: ["Regular", Tr.t("Bold")]; index: s.weight === "bold" ? 1 : 0
-                                        onPicked: function (i) { backend.setSetting("weight", i === 1 ? "bold" : "normal") } }
-                        }
-                        Column {
-                            width: (parent.width - 16) / 2; spacing: 8
-                            Text { text: Tr.t("LABELS"); color: Tokens.sub
-                                   font.family: Tokens.font; font.pixelSize: Tokens.fsSmall; font.bold: true }
-                            Segmented { width: parent.width; model: ["Regular", Tr.t("Bold")]; index: s.label_weight === "bold" ? 1 : 0
-                                        onPicked: function (i) { backend.setSetting("label_weight", i === 1 ? "bold" : "normal") } }
-                        }
-                    }
-                }
+                width: parent.width; height: 132
+                Text { x: 20; y: 18; text: Tr.t("Appearance"); color: Tokens.text
+                       font.family: Tokens.font; font.pixelSize: Tokens.fsHead; font.weight: Font.DemiBold }
+                Text { x: 20; y: 42; width: parent.width - 40; elide: Text.ElideRight
+                       text: Tr.t("A dark, see-through bar that stays readable over any game.")
+                       color: Tokens.sub; font.family: Tokens.font; font.pixelSize: 12 }
+                SliderRow { x: 20; y: 72; width: parent.width - 40; label: Tr.t("OPACITY"); unit: "%"
+                            from: 40; to: 100; step: 5; value: s.alpha
+                            onMoved: function (v) { backend.setSetting("alpha", v) } }
             }
         }
 
@@ -211,12 +154,16 @@ Item {
                                     model: modelData.items
                                     Rectangle {
                                         width: lab.width + 24; height: 30; radius: 10
-                                        color: s.show[modelData.key] ? Tokens.accentA(0.20) : Tokens.fg(0.05)
+                                        color: s.show[modelData.key] ? Tokens.accentA(Tokens.light ? 0.12 : 0.16) : Tokens.bg0
                                         border.width: 1
-                                        border.color: s.show[modelData.key] ? Tokens.accent : Tokens.line
-                                        Text { id: lab; anchors.centerIn: parent; text: Tr.t(modelData.label)
-                                               color: s.show[modelData.key] ? Tokens.text : Tokens.dim
-                                               font.family: Tokens.font; font.pixelSize: Tokens.fsSmall; font.bold: true }
+                                        border.color: s.show[modelData.key] ? Tokens.accentA(0.0) : Tokens.line
+                                        Row { id: lab; anchors.centerIn: parent; spacing: 5
+                                              Text { visible: s.show[modelData.key]; text: "\uE73E"; color: Tokens.accent
+                                                     anchors.verticalCenter: parent.verticalCenter
+                                                     font.family: Tokens.iconFont; font.pixelSize: 10 }
+                                              Text { text: Tr.t(modelData.label)
+                                                     color: s.show[modelData.key] ? Tokens.accent : Tokens.sub
+                                                     font.family: Tokens.font; font.pixelSize: 12; font.weight: Font.DemiBold } }
                                         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
                                                     onClicked: backend.setShow(modelData.key, !s.show[modelData.key]) }
                                     }
@@ -253,11 +200,11 @@ Item {
                             model: ["primary"].concat(backend.screens)
                             Rectangle {
                                 width: chip.width + 24; height: 32; radius: 10
-                                color: s.monitor === modelData ? Tokens.accentA(0.20) : Tokens.fg(0.05)
-                                border.width: 1; border.color: s.monitor === modelData ? Tokens.accent : Tokens.line
+                                color: s.monitor === modelData ? Tokens.accentA(Tokens.light ? 0.12 : 0.16) : Tokens.bg0
+                                border.width: 1; border.color: s.monitor === modelData ? Tokens.accentA(0.0) : Tokens.line
                                 Text { id: chip; anchors.centerIn: parent
                                        text: modelData === "primary" ? Tr.t("Primary (Windows)") : modelData.replace("\\\\.\\", "")
-                                       color: Tokens.text; font.family: Tokens.font
+                                       color: s.monitor === modelData ? Tokens.accent : Tokens.sub; font.family: Tokens.font
                                        font.pixelSize: Tokens.fsSmall; font.bold: true }
                                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
                                             onClicked: backend.setSetting("monitor", modelData) }

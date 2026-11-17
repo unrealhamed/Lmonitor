@@ -45,10 +45,11 @@ v = b.overlay_view(b.overlay_read())
 chk("hidden items vanish; a saved order is applied (missing groups appended)", [g["name"] for g in v["groups"]][:2] == ["NET", "CPU"] and "g_temp" not in [i["key"] for g in v["groups"] for i in g["items"]])
 chk("unknown metric key refused", b.set_show("nope", True) is False)
 texts = {"g_use": ("90%", "#ff0000"), "c_use": ("5%", None)}
-b.settings.reset(); b.set_setting("value_color", "amber")
+b.settings.reset(); b.set_setting("value_color", "amber")      # 1.19: one look - white values
 v = b.overlay_view(texts)
 cols = {i["key"]: i["color"] for g in v["groups"] for i in g["items"]}
-chk("warning colors are kept, normal values use the chosen value color", cols["g_use"] == "#ff0000" and cols["c_use"] == b.value_hex() and b.value_hex() != "#ffffff")
+chk("warning colors are kept, normal values are white", cols["g_use"] == "#ff0000" and cols["c_use"] == "#ffffff"
+    and b.settings["value_color"] == "white")
 chk("missing reading shows --, never a number", {i["key"]: i["text"] for g in v["groups"] for i in g["items"]}["g_temp"] == "--")
 b.settings.reset()
 chk("settings go through the engine's validation", b.set_setting("text", 99) and b.settings["text"] == 18 and b.set_setting("pos", "evil") and b.settings["pos"] == "left" and b.set_setting("bogus", 1) is False)

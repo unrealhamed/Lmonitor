@@ -139,15 +139,15 @@ Item {
                                 readonly property bool full: !on && page.items.length >= backend.hudMaxItems
                                 width: chipRow.width + 22; height: 32; radius: 10
                                 opacity: full ? 0.45 : 1
-                                color: on ? Tokens.accentA(0.20) : Tokens.fg(0.05)
-                                border.width: 1; border.color: on ? Tokens.accent : Tokens.line
+                                color: on ? Tokens.accentA(Tokens.light ? 0.12 : 0.16) : Tokens.bg0
+                                border.width: 1; border.color: on ? Tokens.accentA(0.0) : Tokens.line
                                 Row {
                                     id: chipRow; anchors.centerIn: parent; spacing: 6
                                     Text { visible: parent.parent.on; text: (parent.parent.pos + 1) + "."
                                            color: Tokens.accent; font.family: Tokens.font
                                            font.pixelSize: Tokens.fsSmall; font.bold: true }
                                     Text { text: Tr.t(modelData.title)
-                                           color: parent.parent.on ? Tokens.text : Tokens.sub
+                                           color: parent.parent.on ? Tokens.accent : Tokens.sub
                                            font.family: Tokens.font; font.pixelSize: Tokens.fsSmall; font.bold: true }
                                 }
                                 MouseArea { anchors.fill: parent; enabled: !parent.full
@@ -198,11 +198,11 @@ Item {
                             model: ["primary"].concat(backend.screens)
                             Rectangle {
                                 width: mon.width + 24; height: 32; radius: 10
-                                color: page.h.hud_monitor === modelData ? Tokens.accentA(0.20) : Tokens.fg(0.05)
-                                border.width: 1; border.color: page.h.hud_monitor === modelData ? Tokens.accent : Tokens.line
+                                color: page.h.hud_monitor === modelData ? Tokens.accentA(Tokens.light ? 0.12 : 0.16) : Tokens.bg0
+                                border.width: 1; border.color: page.h.hud_monitor === modelData ? Tokens.accentA(0.0) : Tokens.line
                                 Text { id: mon; anchors.centerIn: parent
                                        text: modelData === "primary" ? Tr.t("Primary (Windows)") : modelData.replace("\\\\.\\", "")
-                                       color: Tokens.text; font.family: Tokens.font
+                                       color: page.h.hud_monitor === modelData ? Tokens.accent : Tokens.sub; font.family: Tokens.font
                                        font.pixelSize: Tokens.fsSmall; font.bold: true }
                                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
                                             onClicked: backend.setHudSetting(page.n, "hud_monitor", modelData) }

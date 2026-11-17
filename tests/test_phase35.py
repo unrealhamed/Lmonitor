@@ -104,7 +104,7 @@ main = read("lmonitor", "qt", "qml", "Main.qml")
 page = read("lmonitor", "qt", "qml", "pages", "NetUsagePage.qml")
 dash = read("lmonitor", "qt", "qml", "pages", "Dashboard.qml")
 fa = read("lmonitor", "qt", "qml", "Lmonitor", "fa.js")
-chk("page in the window, not in the side menu", '"Network usage", src: "pages/NetUsagePage.qml", hidden: true' in main
+chk("page in the window, not in the side menu", 'src: "pages/NetUsagePage.qml", hidden: true' in main
     and "visible: !modelData.hidden" in main)
 chk("Home's Network card opens it", 'page.go("Network usage")' in dash)
 chk("1 / 15 / 30 days", '["1 day", "15 days", "30 days"]' in page)

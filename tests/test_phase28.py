@@ -122,16 +122,14 @@ chk("the CPU card says why the temperature is missing", '"Paused by anti-cheat s
 chk("nothing is hidden or disguised (plain statement in the code)", "Nothing is hidden or disguised" in src)
 
 # ---- Personalize
-chk("10 themes", len(Theme.UI_THEMES) == 10)
-chk("17 accent choices incl. custom", len(Theme.UI_ACCENTS) == 17 and Theme.UI_ACCENTS[-1][0] == "custom")
-chk("custom accent from a hue", Theme.hue_hex(0).startswith("#") and Theme.hue_hex(0) != Theme.hue_hex(180) and len(Theme.hue_hex(359)) == 7)
-c = Settings._clean(dict(deepcopy(cfg), ui_scale=300, ui_radius="x", ui_font="Comic", ui_hue=999, ui_accent="custom"))
-chk("bad look values fall back", (c["ui_scale"], c["ui_radius"], c["ui_font"], c["ui_hue"]) == (100, "round", "Segoe UI", 359)
-    and c["ui_accent"] == "custom")
-b.settings.data = Settings._clean(dict(deepcopy(cfg), ui_scale=120, ui_radius="sharp", ui_font="Tahoma", ui_accent="custom", ui_hue=200))
+# 1.19: light / dark, 6 accents, 3 sizes (themes, corners, fonts and own hue were removed)
+chk("two modes, six accents, three sizes", Theme.UI_MODES == ("dark", "light") and len(Theme.UI_ACCENTS) == 6
+    and Theme.UI_SCALES == (100, 110, 125))
+c = Settings._clean(dict(deepcopy(cfg), ui_scale=300, ui_accent="custom", ui_mode="x"))
+chk("bad look values fall back", (c["ui_scale"], c["ui_accent"], c["ui_mode"]) == (100, "mint", "dark"))
+b.settings.data = Settings._clean(dict(deepcopy(cfg), ui_scale=125, ui_accent="violet", ui_mode="light"))
 st = b.ui_style()
-chk("style carries size, corners, font and the custom color", st["zoom"] == 1.2 and st["radius"] == 4
-    and st["font"] == "Tahoma" and st["accent"] == Theme.hue_hex(200))
+chk("style carries size, mode and accent", st["zoom"] == 1.25 and st["light"] is True and st["accent"] == "#7C3AED")
 main = read("lmonitor", "qt", "qml", "Main.qml")
 chk("the window background follows the theme (was a fixed dark color)", '"#0a0a0d"' not in main and "color: Tokens.bg0" in main)
 chk("interface size scales the whole window", "Scale { xScale: win.zoom; yScale: win.zoom }" in main)

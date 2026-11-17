@@ -17,7 +17,7 @@ from lmonitor.engine import (AppInfo, BackgroundReader, CardStatus, ChangeLog, C
                              DiagRunner, FpsMonitor, GpuReader, LibreHardwareHost,
                              Logger, MemoryReader, ReportBuilder,
                              ScanStore, SessionAnalyzer, Settings, Telemetry,
-                             Theme, WinApi, GameSettings, fmt_net, Profiles, NetUsage, NetMeter)
+                             Theme, WinApi, GameSettings, fmt_net, Profiles, NetUsage, NetMeter, WhatsNew)
 
 HW_TABS = (("CPU / GPU", "rows_processor"), ("Memory", "rows_memory"),
            ("Storage", "rows_storage"), ("Network", "rows_network"),
@@ -33,7 +33,6 @@ class Backend:
         self.cpu = CpuReader(self.host)
         self.gpu = GpuReader(self.host)
         Theme.apply_vendor(self.gpu.vendor())
-        Theme.apply_ui(self.settings["ui_theme"], self.settings["ui_accent"])
         self.memory = MemoryReader()
         self.fps = FpsMonitor()
         self.graphs = GraphHistory()
@@ -99,7 +98,7 @@ class Backend:
         # page open, graph overlay off) it gets this once-a-second reading, so coming back to
         # a real-time chart shows a line, not a hole
         if not self.hud_realtime():
-            self.hud_tick()
+            self.hud_tick(min_gap=0.4)
         fans = ({n: v for _, _, st, n, v in self.telemetry.sensors.read() if st == "Fan"}
                 if self.graph_fans else None)
         self.graphs.add(self.telemetry.snap, fans, time.time())
@@ -111,7 +110,8 @@ class Backend:
         scrolls into view. Anchored on the newest reading, so the last slot holds a value."""
         if not seconds:
             n, span, period, hist = 40, Hud.REALTIME_SECONDS, Hud.REALTIME_PERIOD, self.hud_hist
-            gap = max(4 * period, 1.5, self.telemetry.interval * 1.6)   # see sample()
+            # a short hole (a page change, a busy moment) is joined; see sample()
+            gap = max(4 * period, 2.5, self.telemetry.interval * 2.2)
         else:
             n, span, period, hist = 60, seconds, self.telemetry.interval, self.graphs
             gap = max(GraphHistory.MAX_GAP, self.telemetry.interval * 2.2)
@@ -169,13 +169,21 @@ class Backend:
         cards["cpu"]["note"] = self._cpu_note(t)
         cards["cpu"]["name"] = self._cpu_name()
         cards["gpu"]["name"] = self._gpu_name()
+        if rows:
+            cards["disk"]["total_gb"] = rows[0]["total"] / 1024 ** 3
         sc = ReportBuilder.score(self.scanner.issues)
         fps = self.fps
+        net = tel.network
+        main = net.main_adapter()
+        rx, tx = net.since_boot()
         return {
             "ready": True, "cards": cards, "pc": platform.node(), "user": self._user(),
             "network": {"down": fmt_net(s["net_down"], self.settings["net_unit"]),
                         "up": fmt_net(s["net_up"], self.settings["net_unit"]),
-                        "hist": [v for v in list(h["net_down"])[-HIST:]]},
+                        "hist": [v for v in list(h["net_down"])[-HIST:]],
+                        "adapter": main[0] if main else "", "link": main[1] if main else 0,
+                        "since_boot": fmt_size(rx + tx) if rx is not None else ""},
+            "pc_info": self.pc_info(sc),
             "status": {"score": sc["value"], "covered": sc["covered"],
                        "total": sc["total"],
                        "cpu_sensor": t is not None, "gpu_sensor": gt is not None,
@@ -186,6 +194,39 @@ class Backend:
         }
 
     _last_sess, _last_sess_t = None, 0.0
+    _boot = None
+    _plan, _plan_bg = "", None
+
+    def _read_plan(self):
+        from lmonitor.engine import PowerManager
+        p = PowerManager.active()
+        self._plan = p["name"] if p else ""
+
+    def pc_info(self, score=None):
+        """The "This PC" card: up time, battery, power plan, last PC check. Cheap: the power
+        plan is read on its own thread every 5 minutes, the rest are single quick calls."""
+        out = {"windows": self.telemetry.info.windows or ""}
+        try:
+            if self._boot is None:
+                self._boot = psutil.boot_time()
+            up = max(0, int(time.time() - self._boot))
+            out["uptime"] = ("%d d %d h" % (up // 86400, up % 86400 // 3600) if up >= 86400
+                             else "%d h %d min" % (up // 3600, up % 3600 // 60))
+        except Exception:
+            out["uptime"] = ""
+        try:
+            bat = psutil.sensors_battery()
+        except Exception:
+            bat = None
+        out["battery"] = None if bat is None else {"pct": round(bat.percent), "plugged": bool(bat.power_plugged)}
+        if self._plan_bg is None:
+            self._plan_bg = BackgroundReader(self._read_plan, 300.0, "power plan")
+        self._plan_bg.poke()
+        out["plan"] = self._plan
+        sc = score or ReportBuilder.score(self.scanner.issues)
+        out["score"] = sc["value"]
+        out["scan_when"] = self._when(self.scanner.when) if self.scanner.when else ""
+        return out
 
     def now_box(self):
         """What is going on right now, for the Home page: the game in front and its frame
@@ -317,37 +358,9 @@ class Backend:
     def density(self):
         return Profiles.density_of(self.settings.show)
 
-    QT_DEFAULT = {"bg0": "#08080a", "bg1": "#0e0e11", "card": "#131316",
-                  "cardHi": "#1a1a1f", "line": "#26262c", "text": "#f4f4f6",
-                  "sub": "#a0a0aa", "dim": "#64646e", "accent": "#1fd18b",
-                  "light": False}
-
-    def ui_style(self, theme=None, accent=None):
-        """Colors of the window for a theme + accent (plain data, no UI)."""
-        theme = theme or self.settings["ui_theme"]
-        accent = accent or self.settings["ui_accent"]
-        spec = Theme.ui_spec(theme)
-        if theme == "default":
-            d = dict(self.QT_DEFAULT)
-            base = d["accent"]
-        else:
-            light = spec["light"]
-            d = {"bg0": spec["C_BG"], "bg1": spec["C_SIDE"], "card": spec["C_CARD"],
-                 "cardHi": Theme.mix(spec["C_CARD"], "#000000" if light else "#ffffff", 0.05),
-                 "line": spec["C_TRACK"], "text": spec["TXT"], "sub": spec["SUB"],
-                 "dim": spec["DIM"], "light": light}
-            base = spec["accent"] or Theme.VENDOR["accent"]
-        chosen = dict((k, c) for k, _, c in Theme.UI_ACCENTS).get(accent)
-        if accent == "custom":
-            chosen = Theme.hue_hex(self.settings["ui_hue"])
-        if chosen:
-            base = chosen
-        if d["light"]:
-            base = Theme.mix(base, "#000000", 0.16)
-        d["accent"] = base
-        d["accentText"] = Theme._on_color(base)
-        d["radius"] = dict(Theme.UI_RADII)[self.settings["ui_radius"]]
-        d["font"] = self.settings["ui_font"]
+    def ui_style(self, mode=None, accent=None):
+        """Colors and size of the window (plain data, no UI)."""
+        d = Theme.ui_colors(mode or self.settings["ui_mode"], accent or self.settings["ui_accent"])
         d["zoom"] = self.settings["ui_scale"] / 100.0
         return d
 
@@ -355,15 +368,16 @@ class Backend:
         self.settings.data["order"] = Metrics.clean_order(order)
 
     def reset_settings(self):
+        """Overlay settings back to the start; the window's look and language stay."""
+        keep = {k: self.settings[k] for k in ("ui_mode", "ui_accent", "ui_scale", "language")}
         self.settings.reset()
+        self.settings.data.update(keep)
 
     def save_settings(self):
         self.settings.save()
 
-    def value_hex(self):
-        for k, _, col in Theme.VALUE_COLORS:
-            if k == self.settings["value_color"]:
-                return col or Theme.ACCENT
+    @staticmethod
+    def value_hex():
         return Theme.WHITE
 
     def group_colors(self):
@@ -455,14 +469,17 @@ class Backend:
         """Seconds between two graph-overlay readings."""
         return Hud.REALTIME_PERIOD if self.hud_realtime() else 1.0
 
-    def hud_tick(self, now=None):
+    def hud_tick(self, now=None, min_gap=None):
         """One graph-overlay reading when it is due (worker thread). Normal spans reuse the
         dashboard's reading of each second; real time reads 4x a second, but only cheap
         sources: NVML (NVIDIA), Windows CPU / RAM counters and PresentMon's frame list.
         CPU temperature / power stay at the once-a-second sensor reading. -> True if read."""
         now = time.time() if now is None else now
         period = self.hud_period()
-        if now - self._hud_t < period * 0.85:
+        # min_gap: the once-a-second reading of sample() only skips a turn when the last
+        # reading is very new (it skipped whenever one was under 0.85 s old - right after
+        # the fast readings of another page stopped, two turns in a row: a 1.7 s hole)
+        if now - self._hud_t < (period * 0.85 if min_gap is None else min_gap):
             return False
         since, self._hud_t = self._hud_t or now - period, now
         live = self.telemetry.snap or {}
@@ -676,6 +693,20 @@ class Backend:
                 + SessionView.rows_apps(sm))
         return self.sections(rows)
 
+    # ================================================= What's new (once after an update)
+    def whats_new(self):
+        """The What's new box to show now, or None. A new install shows nothing (the version
+        is just remembered); an update shows what was added since the last seen version."""
+        cur, seen = AppInfo.VERSION, self.settings["seen_version"]
+        if not seen and not self.settings.existed:
+            self.whats_new_seen()
+            return None
+        return WhatsNew.pending(seen, cur)
+
+    def whats_new_seen(self):
+        self.settings["seen_version"] = AppInfo.VERSION
+        self.settings.save()
+
     # ================================================= network usage (Home > Network)
     USAGE_RANGES = (1, 15, 30)
     FA_DAYS = ("دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه", "شنبه", "یکشنبه")
@@ -690,6 +721,15 @@ class Backend:
             return "%s %d %s %d" % (self.FA_DAYS[lt.tm_wday], lt.tm_mday, self.FA_MONTHS[lt.tm_mon - 1],
                                     lt.tm_year)
         return time.strftime("%d %b" if short else "%A %d %B %Y", lt).lstrip("0")
+
+    def _clock_text(self, h):
+        """0-23 -> '4 PM' / '4 بعدازظهر' (which part of the day an hour is)."""
+        n = h % 12 or 12
+        if self.settings["language"] == "fa":
+            part = ("بامداد" if h < 5 else "صبح" if h < 12 else "ظهر" if h == 12
+                    else "بعدازظهر" if h < 18 else "شب")
+            return "%d %s" % (n, part)
+        return "%d %s" % (n, "AM" if h < 12 else "PM")
 
     @staticmethod
     def _size(n):
@@ -727,6 +767,14 @@ class Backend:
         out["hours"] = [{"h": i, "down": h["down"] / hmax, "up": h["up"] / hmax,
                          "text": self._size(h["down"] + h["up"]), "empty": not (h["down"] or h["up"])}
                         for i, h in enumerate(hours)]
+        # the simple list of the page: one row per hour that had traffic, in time order
+        now = time.localtime()
+        today = nu.day_start(time.time()) == day
+        out["usedHours"] = [{"h": i, "range": "%02d:00 - %02d:00" % (i, (i + 1) % 24),
+                             "clock": self._clock_text(i), "text": self._size(h["down"] + h["up"]),
+                             "down": self._size(h["down"]), "up": self._size(h["up"]),
+                             "frac": (h["down"] + h["up"]) / hmax, "now": today and i == now.tm_hour}
+                            for i, h in enumerate(hours) if h["down"] or h["up"]]
         dd, du = sum(h["down"] for h in hours), sum(h["up"] for h in hours)
         out.update(dayTotal=self._size(dd + du), dayDown=self._size(dd), dayUp=self._size(du))
         pmax = max([p["down"] + p["up"] for p in progs] or [0]) or 1

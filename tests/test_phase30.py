@@ -71,7 +71,7 @@ chk("Home: no overlay settings in the box any more", "Liquid glass look" not in 
 chk("Home: graph overlay switch at the top", 'backend.setHudSetting(0, "hud_on", v)' in dash)
 chk("Home: 'Right now' box with game, frame rate, session", 'Tr.t("Right now")' in dash and "page.now.game" in dash
     and "page.now.last" in dash)
-chk("Home chart uses the smooth chart with both spans", "GraphChart {" in read("lmonitor", "qt", "qml", "components", "PerfChart.qml")
+chk("Home chart uses the smooth chart with both spans", "GraphChart {" in dash
     and "backend.graphs(spans[backend.rangeIndex])" in dash)
 
 

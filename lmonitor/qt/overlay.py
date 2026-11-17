@@ -6,7 +6,6 @@ Settings stay compatible with the classic Tk bar: pos/x/y/monitor/show_mode/
 hotkey_secs/look/alpha. A custom position is saved in physical pixels relative
 to its display, exactly like the Tk bar does.
 """
-import sys
 import time
 
 from PySide6.QtCore import QObject, Qt, QTimer, Slot
@@ -129,30 +128,14 @@ class OverlayHost(QObject):
             Logger.error("qt overlay apply")
 
     def _look(self):
-        """Blur-behind for the glass look (Windows 10 1803+), else plain.
-        Done only when something it depends on changed: these window-manager calls
-        (blur, corners, always-on-top) disturb a game when repeated."""
-        S = self.b.settings
-        old_windows = sys.getwindowsversion().build < 22000   # corners need the size there
-        key = (S["look"], S["bg"], S["alpha"], int(self.win.winId()),
-               (self.win.width(), self.win.height()) if old_windows else None)
+        """Keep the bar above the game. Done only when the window is new or its size changed
+        on old Windows: these window-manager calls disturb a game when repeated."""
+        key = int(self.win.winId())
         if key == self._look_key:
             return
         self._look_key = key
         try:
-            h = int(self.win.winId())
-            dpr = self.screen().devicePixelRatio()
-            if S["look"] == "glass" and WinApi.blur_supported():
-                # light tint so the blurred background shows through
-                ok = WinApi.blur_hwnd(h, Theme.overlay_bg(S["bg"]), int(S["alpha"] * 1.2))
-                WinApi.round_hwnd(h, True, self.win.width() * dpr,
-                                  self.win.height() * dpr, int(10 * dpr))
-                self.bridge.setGlassOk(bool(ok))
-            else:
-                WinApi.blur_hwnd(h, None)
-                WinApi.round_hwnd(h, False)
-                self.bridge.setGlassOk(False)
-            WinApi.keep_on_top_hwnd(h)
+            WinApi.keep_on_top_hwnd(key)
         except Exception:
             Logger.error("qt overlay look")
 

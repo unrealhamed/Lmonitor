@@ -73,8 +73,10 @@ Item {
         onUprightChanged: Tr.rev++                  // texts inside check their direction again
         function checkUpright() { plotBox.upright = Tr.rtl && plotBox.parent !== null && Tr.mirrored(plotBox.parent) }
         transform: Scale { origin.x: plotBox.width / 2; xScale: plotBox.upright ? -1 : 1 }
-        Component.onCompleted: Qt.callLater(function () { plotBox.checkUpright() })
-        Connections { target: Tr; function onLangChanged() { Qt.callLater(function () { plotBox.checkUpright() }) } }
+        // the chart can be gone before the call runs (page changed): then do nothing
+        function later() { Qt.callLater(function () { if (plotBox && typeof plotBox.checkUpright === "function") plotBox.checkUpright() }) }
+        Component.onCompleted: later()
+        Connections { target: Tr; function onLangChanged() { plotBox.later() } }
         x: root.leftGap; width: root.plotW; height: root.height
         clip: true
         Canvas {
