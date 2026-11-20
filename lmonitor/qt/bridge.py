@@ -6,6 +6,7 @@ signals. Settings are validated by the engine and saved (debounced) through
 the same Settings class as the classic window, so both windows share
 %APPDATA%\\Lmonitor\\settings.json.
 """
+import os
 import subprocess
 import sys
 import tempfile
@@ -18,7 +19,7 @@ from PySide6.QtGui import QDesktopServices, QFontDatabase
 
 from lmonitor.backend import HW_TABS, RANGES, Backend
 from lmonitor import updater
-from lmonitor.engine import AppInfo, Autostart, Hud, Logger, Metrics, Settings, Theme, WinApi
+from lmonitor.engine import Alerts, AppInfo, Autostart, Hud, Logger, Metrics, Settings, Theme, WinApi
 from lmonitor.qt.tools import Tools
 
 
@@ -43,6 +44,10 @@ class Bridge(QObject):
     _update_done = Signal(dict)
     _autostart_done = Signal(bool, str)
     netUsageChanged = Signal()
+    alertRaised = Signal(str, str)     # a warning (title, what to do) for the tray
+    alertsChanged = Signal()
+    _alerts_new = Signal(list)         # worker thread -> UI thread
+    _game_switched = Signal()          # a game started / ended: its own overlay settings
 
     HUD_EMPTY = {"items": [], "accent": "#35d6ff", "window": 60}
     FALLBACK_FONTS = ("Consolas", "Cascadia Mono", "Courier New")
@@ -74,6 +79,8 @@ class Bridge(QObject):
         self._update_done.connect(self._on_update)
         self._covered_seen.connect(self._on_covered)
         self._hud_sampled.connect(self._on_hud)
+        self._alerts_new.connect(self._on_alerts)
+        self._game_switched.connect(self.settingsTouched)
         self._nu = {"days": 1, "day": None, "hour": -1, "seen": -1}
         self._nu_view = {"state": "idle"}
         self._nu_timer = QTimer(self)
@@ -179,7 +186,8 @@ class Bridge(QObject):
                 d = {"state": "ready", "path": updater.download(self._info, tempfile.gettempdir())}
             else:
                 self._info = updater.latest(AppInfo.VERSION)
-                d = ({"state": "available", "version": self._info["version"]} if self._info
+                d = ({"state": "available", "version": self._info["version"],
+                      "notes": self._info.get("notes", "")} if self._info
                      else {"state": "none"})
         except Exception as e:
             d = {"state": "error", "text": ("Download failed: " if download else "Could not check: ") + (str(e) or type(e).__name__)}
@@ -228,6 +236,9 @@ class Bridge(QObject):
                 covered = self._game_check()
                 shown = self._ui_visible and not covered
                 self._b.sample()
+                new = self._b.alerts.take()
+                if new:
+                    self._alerts_new.emit(new)
                 if shown:                       # nobody sees it otherwise: skip the work
                     self._sampled.emit(self._b.dashboard(self._range))
             except Exception:
@@ -258,6 +269,8 @@ class Bridge(QObject):
                     if b.safe_tick() != was:            # anti-cheat safe mode switched
                         self._wake.set()
                     b.ensure_fps(fps_in_bar or (hud and b.hud_wants_fps()))
+                    if b.game_tick():                   # a game started / ended
+                        self._game_switched.emit()
                     if b.settings["sessions_on"]:
                         b.sessions.tick()
                 if wanted:
@@ -642,6 +655,42 @@ class Bridge(QObject):
         if self.hud_hosts:
             self.hudStateChanged.emit()
             self._wake.set()                 # the sampler may need to run faster now
+
+    # ---- warnings (see engine.Alerts)
+    def _on_alerts(self, new):
+        fa = self._b.settings["language"] == "fa"
+        for a in new:
+            title, tip = (Alerts.FA.get(a["key"], (a["title"], a["tip"])) if fa else (a["title"], a["tip"]))
+            self.alertRaised.emit(title, tip)
+        self.alertsChanged.emit()
+
+    @Property("QVariantMap", notify=alertsChanged)
+    def alerts(self):
+        rec = [{"key": a["key"], "title": a["title"], "tip": a["tip"],
+                "when": time.strftime("%H:%M", time.localtime(a["t"]))} for a in list(self._b.alerts.recent)]
+        return {"on": bool(self._b.settings["alerts_on"]), "recent": rec}
+
+    @Slot(bool)
+    def setAlertsOn(self, on):
+        self._b.set_setting("alerts_on", bool(on))
+        self.settingsTouched()
+        self.alertsChanged.emit()
+
+    @Slot()
+    def openDataFolder(self):
+        from lmonitor.engine import Paths
+        os.makedirs(Paths.CFG_DIR, exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(Paths.CFG_DIR))
+
+    # ---- every game keeps its own overlay settings
+    @Property("QVariantMap", notify=settingsChanged)
+    def gameProfile(self):
+        return self._b.game_profile()
+
+    @Slot()
+    def forgetGameProfile(self):
+        self._b.forget_game_profile()
+        self.settingsTouched()
 
     @Slot(str, "QVariant")
     def setSetting(self, key, value):

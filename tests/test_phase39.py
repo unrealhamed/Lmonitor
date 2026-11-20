@@ -30,13 +30,13 @@ chk("an entry newer than the running program is not shown", W.pending("", "1.18.
 chk("every slide has a picture, a kind, a title and a text",
     all(s["art"] and s["kind"] in ("new", "fix") and s["title"] and s["text"] for s in p["slides"]))
 old = W.ENTRIES
-W.ENTRIES = ({"version": "1.21.0", "since": "1.20.0", "slides": ({"art": "x", "kind": "new", "title": "B", "text": "b"},)},
-             {"version": "1.20.0", "since": "1.19.0", "slides": ({"art": "x", "kind": "new", "title": "A", "text": "a"},)}) + old
+W.ENTRIES = ({"version": "9.1.0", "since": "9.0.0", "slides": ({"art": "x", "kind": "new", "title": "B", "text": "b"},)},
+             {"version": "9.0.0", "since": "8.9.0", "slides": ({"art": "x", "kind": "new", "title": "A", "text": "a"},)}) + old
 try:
-    q = W.pending("1.19.0", "1.21.0")
+    q = W.pending("8.9.0", "9.1.0")
     chk("two updates skipped: both shown, newest first", [s["title"] for s in q["slides"]] == ["B", "A"]
-        and q["version"] == "1.21.0" and q["since"] == "1.19.0")
-    chk("only the missed one", [s["title"] for s in W.pending("1.20.0", "1.21.0")["slides"]] == ["B"])
+        and q["version"] == "9.1.0" and q["since"] == "8.9.0")
+    chk("only the missed one", [s["title"] for s in W.pending("9.0.0", "9.1.0")["slides"]] == ["B"])
 finally:
     W.ENTRIES = old
 

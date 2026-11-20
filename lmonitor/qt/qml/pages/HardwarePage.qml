@@ -12,9 +12,38 @@ Item {
     Component.onCompleted: backend.openHardware(page.tab, true)
     Component.onDestruction: backend.openHardware(0, false)
 
-    PageHeader { id: head; width: parent.width; kicker: Tr.t("Everything about this PC"); title: Tr.t("Hardware") }
+    PageHeader {
+        id: head; width: parent.width; kicker: Tr.t("Everything about this PC"); title: Tr.t("Hardware")
+        Text { anchors.verticalCenter: parent.verticalCenter; text: Tr.t("Warn me about problems"); color: Tokens.sub
+               font.family: Tokens.font; font.pixelSize: Tokens.fsBody }
+        ToggleSwitch { anchors.verticalCenter: parent.verticalCenter; checked: backend.alerts.on === true
+                       onToggled: function (v) { backend.setAlertsOn(v) } }
+    }
+    Card {                                       // the latest warnings (they are also shown next to the clock)
+        id: warnCard
+        readonly property var rec: (backend.alerts.recent || []).slice(0, 3)
+        visible: rec.length > 0
+        y: head.height + 12; width: parent.width; height: visible ? warnCol.height + 28 : 0
+        Column {
+            id: warnCol; x: 20; y: 14; width: parent.width - 40; spacing: 8
+            Text { text: Tr.t("Recent warnings"); color: Tokens.text; font.family: Tokens.font
+                   font.pixelSize: Tokens.fsHead; font.weight: Font.DemiBold }
+            Repeater {
+                model: warnCard.rec
+                Item {
+                    width: warnCol.width; height: wt.implicitHeight + wtip.implicitHeight + 4
+                    Text { id: wtime; text: modelData.when; color: Tokens.dim; font.family: Tokens.font; font.pixelSize: Tokens.fsSmall
+                           width: 44; y: 1 }
+                    Text { id: wt; x: 50; width: parent.width - 50; wrapMode: Text.WordWrap; text: Tr.t(modelData.title)
+                           color: Tokens.warn; font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: true }
+                    Text { id: wtip; x: 50; y: wt.implicitHeight + 2; width: parent.width - 50; wrapMode: Text.WordWrap
+                           text: Tr.t(modelData.tip); color: Tokens.sub; font.family: Tokens.font; font.pixelSize: Tokens.fsSmall }
+                }
+            }
+        }
+    }
     Segmented {
-        id: tabs; y: head.height + 12; width: Math.min(parent.width, 760)
+        id: tabs; y: head.height + 12 + (warnCard.visible ? warnCard.height + page.g : 0); width: Math.min(parent.width, 760)
         model: backend.hardwareTabs; index: page.tab
         onPicked: function (i) { page.tab = i; backend.openHardware(i, true) }
     }

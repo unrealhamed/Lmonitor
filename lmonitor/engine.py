@@ -373,6 +373,9 @@ class Settings:
                 "ui_scale": 100,
                 # the newest version whose "What's new" box was shown (see class WhatsNew)
                 "seen_version": "",
+                # warnings next to the clock (see class Alerts); every game keeps its own
+                # overlay settings (see Settings.begin_game)
+                "alerts_on": True, "profiles_on": True, "game_profiles": {},
                 "order": Metrics.default_order(),
                 "show": {k: True for k in Metrics.KEYS}}
 
@@ -382,12 +385,74 @@ class Settings:
         DEFAULTS["hud2_" + _k[4:]] = deepcopy(DEFAULTS[_k])
     DEFAULTS.update(hud2_pos="tl", hud2_items=["g_use", "c_use", "r_use"], hud2_theme="toxic")
     del _k
-    EXTRA_KEYS = ("safe_mode", "ui_scale", "ui_mode", "seen_version")
+    EXTRA_KEYS = ("safe_mode", "ui_scale", "ui_mode", "seen_version", "alerts_on", "profiles_on",
+                  "game_profiles")
+    # what a game's own settings may hold: how the overlays look and what they show
+    PROFILE_KEYS = ("on", "pos", "x", "y", "monitor", "layout", "text", "graph", "alpha", "show",
+                    "order", "show_mode", "hotkey_secs")
+    MAX_PROFILES = 50
+    game = ""               # the game whose own settings are in use (see begin_game)
+    base = {}               # the normal settings, kept aside while a game's are in use
 
     def __init__(self):
         Paths.migrate()
         self.existed = os.path.exists(Paths.CFG_FILE)    # False on a new install
         self.data = self._load()
+        self.game = ""          # the game whose own settings are in use right now
+        self.base = {}          # the normal settings, kept while a game's are in use
+
+    # ---- every game keeps its own overlay settings
+    @classmethod
+    def profile_keys(cls):
+        return cls.PROFILE_KEYS + tuple(k for k in cls.DEFAULTS if k.startswith(cls.HUD_PREFIXES))
+
+    def begin_game(self, name):
+        """A game started: keep the normal settings aside and use the game's own, if it has
+        any. Changes made while it runs are remembered for this game only (note_change)."""
+        name = (name or "").lower()
+        if not name or name == self.game:
+            return False
+        self.end_game()
+        self.base = {k: deepcopy(self.data[k]) for k in self.profile_keys()}
+        self.game = name
+        own = self.data["game_profiles"].get(name)
+        if own:
+            cfg = deepcopy(self.data)
+            cfg.update(deepcopy(own))
+            self.data.update(self._clean(cfg))
+        return True
+
+    def end_game(self):
+        """The game closed: back to the normal settings."""
+        if not self.game:
+            return False
+        self.data.update(deepcopy(self.base))
+        self.game, self.base = "", {}
+        return True
+
+    def note_change(self, keys):
+        """Settings were changed while a game runs: they belong to that game."""
+        if not self.game:
+            return
+        pk = self.profile_keys()
+        keys = [k for k in keys if k in pk]
+        if not keys:
+            return
+        own = self.data["game_profiles"].setdefault(self.game, {})
+        if "x" in keys or "y" in keys or "pos" in keys:
+            keys = list(set(keys) | {"pos", "x", "y", "monitor"})
+        for k in keys:
+            own[k] = deepcopy(self.data[k])
+        profs = self.data["game_profiles"]
+        while len(profs) > self.MAX_PROFILES:                # keep the newest
+            del profs[next(iter(profs))]
+
+    def forget_game(self, name):
+        """Remove a game's own settings; if it runs now, the normal ones are used again."""
+        name = (name or "").lower()
+        self.data["game_profiles"].pop(name, None)
+        if name and name == self.game:
+            self.data.update(deepcopy(self.base))
 
     def __getitem__(self, key):
         return self.data[key]
@@ -529,20 +594,33 @@ class Settings:
         cfg["weight"] = cfg["label_weight"] = "bold"
         if not isinstance(cfg["seen_version"], str) or len(cfg["seen_version"]) > 20:
             cfg["seen_version"] = ""
+        cfg["alerts_on"] = bool(cfg["alerts_on"])
+        cfg["profiles_on"] = bool(cfg["profiles_on"])
+        profs, pk = cfg["game_profiles"], cls.profile_keys()
+        if not isinstance(profs, dict):
+            profs = {}
+        cfg["game_profiles"] = {str(g)[:80].lower(): {k: v for k, v in p.items() if k in pk}
+                                for g, p in list(profs.items())[-cls.MAX_PROFILES:]
+                                if isinstance(p, dict)}
         return cfg
 
     def save(self):
         try:
             os.makedirs(Paths.CFG_DIR, exist_ok=True)
             tmp = Paths.CFG_FILE + ".tmp"
+            out = self.data
+            if self.game:               # a game's own settings are in use: save the normal ones
+                out = dict(self.data)
+                out.update(self.base)
             with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(self.data, f)
+                json.dump(out, f)
             os.replace(tmp, Paths.CFG_FILE)
         except Exception:
             Logger.error("settings save")
 
     def reset(self):
         seen = self.data.get("seen_version", "")
+        self.game, self.base = "", {}
         self.data.clear()
         self.data.update(deepcopy(self.DEFAULTS))
         self.data["seen_version"] = seen          # "Reset" must not show What's new again
@@ -1018,6 +1096,8 @@ class BackgroundReader:
         self.fn, self.period, self.name = fn, float(period), name
         self.runs = 0
         self._asked = self._last = self._fast_until = 0.0
+        self.ok_at = 0.0            # last run that did not fail
+        self._started = 0.0         # when the thread (re)started
         self._fast = None
         self._thread = None
         self._lock = threading.Lock()
@@ -1027,10 +1107,22 @@ class BackgroundReader:
             return
         try:
             self.fn()
+            self.ok_at = time.monotonic()
         except Exception:
             Logger.error(self.name)
         self.runs += 1
         self._last = time.monotonic()
+
+    STALE = 10.0                # s without a good reading while it should have run
+
+    def stale(self, now=None):
+        """The reading stopped working: the thread runs (or was asked) but nothing good
+        came for STALE seconds. The values it left behind must not be shown as live."""
+        if self.SYNC or not self.runs:
+            return False
+        now = time.monotonic() if now is None else now
+        limit = max(self.STALE, self.period * 4)
+        return now - self.ok_at > limit and now - self._started > limit
 
     def _period(self, now):
         return self._fast if (self._fast and now < self._fast_until) else self.period
@@ -1054,6 +1146,7 @@ class BackgroundReader:
             with self._lock:
                 t = self._thread
                 if t is None or not t.is_alive():
+                    self._started = time.monotonic()
                     self._thread = threading.Thread(target=self._loop, name=self.name, daemon=True)
                     self._thread.start()
 
@@ -1075,6 +1168,7 @@ class BackgroundReader:
 # =============================================================== CPU
 class CpuReader:
     MIN_UPDATE = 0.8                # seconds between two real sensor updates
+    stale = False                   # the sensor thread stopped answering (see BackgroundReader)
 
     def __init__(self, host):
         self.host = host
@@ -1118,8 +1212,11 @@ class CpuReader:
         h = self.host
         t = p = c = None
         approx = False
+        self.stale = False
         if h.cpu_hw is not None:
             self._bg.poke()
+            self.stale = self._bg.stale()
+        if h.cpu_hw is not None and not self.stale:
             try:
                 if want_t:
                     t = h.positive(h.value(h.cpu_temp))
@@ -1173,7 +1270,7 @@ class GpuReader:
         if not self.available:
             return None
         self._reader().poke()
-        return self._cache[5]
+        return None if self._bg.stale() else self._cache[5]
 
     def vendor(self):
         """"nvidia", "amd" or "other" (drives the window's accent color)."""
@@ -1209,6 +1306,9 @@ class GpuReader:
     # fan() return the newest ones without waiting for the driver
     _bg = None
     _cache = (None, None, None, None, None, None)     # use, temp, power, clock, mem, fan
+    stale = False                                     # see BackgroundReader.stale
+    thermal = None          # NVIDIA: the clock is held down because of heat (None = unknown)
+    THERMAL_BITS = 0x20 | 0x40                        # SW / HW thermal slowdown (NVML)
     _lhm = False                                      # the sensor library is needed too
 
     def _reader(self):
@@ -1236,6 +1336,12 @@ class GpuReader:
                 mem = (m.used / 1024**3, m.total / 1024**3)
             fn = getattr(nv, "nvmlDeviceGetFanSpeed", None)
             fan = self._q(fn) if fn is not None else None
+            # the driver's own answer to "is the clock held down because of heat?"
+            # (software or hardware thermal slowdown); None when the driver does not say
+            fn = (getattr(nv, "nvmlDeviceGetCurrentClocksEventReasons", None)
+                  or getattr(nv, "nvmlDeviceGetCurrentClocksThrottleReasons", None))
+            r = self._q(fn) if fn is not None else None
+            self.thermal = None if r is None else bool(int(r) & self.THERMAL_BITS)
         self._cache = (use, temp, pw, clk, mem, fan)
         if self._lhm:       # AMD / Intel, or what NVML could not read: the sensor library
             with HW_LOCK:
@@ -1251,7 +1357,9 @@ class GpuReader:
         The values are at most one reading old; this call never waits for the driver."""
         use = temp = pw = clk = mem = None
         self._reader().poke(Hud.REALTIME_PERIOD if nvml_only else None)
-        if self.available:
+        # the driver stopped answering: what is left in the cache is old - not shown as live
+        self.stale = self._bg.stale()
+        if self.available and not self.stale:
             u, t, p, c, m, _fan = self._cache
             use = u if want["g_use"] else None
             temp = t if want["g_temp"] else None
@@ -1792,6 +1900,16 @@ class WhatsNew:
     frametime, smooth - or "generic"); "kind" is "new" or "fix". A version without an entry
     shows nothing. Texts are English; Persian ones are in fa.js."""
     ENTRIES = (
+        {"version": "1.20.0", "since": "1.19.1", "slides": (
+            {"art": "report", "kind": "new", "title": "A report after every game",
+             "text": "Sessions now shows the main numbers first - FPS, 1% and 0.1% lows, temperatures, power - and what slowed the game down, in plain words. Compare two sessions to see if a change helped."},
+            {"art": "alerts", "kind": "new", "title": "Warnings that matter",
+             "text": "Lmonitor tells you when your PC gets too hot, slows down because of heat, runs out of memory or the frame rate drops a lot - once, not again and again. Turn it off on the Hardware page."},
+            {"art": "profiles", "kind": "new", "title": "Settings for each game",
+             "text": "Change the overlays while a game runs and that game keeps them. Next time it starts, they come back by themselves."},
+            {"art": "simple", "kind": "new", "title": "Honest numbers",
+             "text": "A sensor that stops answering shows as not available - never an old value. About now explains what Lmonitor keeps on your PC, and an update shows what it changes before you install it."},),
+         },
         {"version": "1.19.0", "since": "1.18.6", "slides": (
             {"art": "design", "kind": "new", "title": "A new look",
              "text": "A calmer, cleaner design: flat cards, icons in the menu and clear colors, made for Windows."},
@@ -1843,7 +1961,7 @@ class WhatsNew:
 class AppInfo:
     """Name / version shown in the Hardware > System tab."""
     NAME = "Lmonitor"
-    VERSION = "1.19.1"
+    VERSION = "1.20.1"
     PUBLISHER = ""      # put your name or company here (empty = "Not set")
     URL = "https://github.com/unrealhamed/Lmonitor"
 
@@ -2792,6 +2910,7 @@ class SessionAnalyzer:
     GPU_LOAD, CPU_LOAD = 90, 50
     GPU_DROP, CPU_DROP = 0.10, 0.15
     MIN_SECS = 6            # evidence must last this long
+    MIN_FRAMES_LOW1, MIN_FRAMES_LOW01 = 1000, 10000   # frames for a trustworthy 1% / 0.1% low
     HEAVY_CPU, HEAVY_MB = 3.0, 800
 
     @staticmethod
@@ -2999,14 +3118,22 @@ class SessionAnalyzer:
         else:
             add("ok", "Frame-rate drops", "No big frame-rate drops")
         a = cls.avg
+        count = frames.get("count", 0) or 0
+        avg_fps = 1000.0 * count / frames["total_ms"] if frames.get("total_ms") else None
+        # 1% / 0.1% lows need enough frames to mean something: at least 10 frames in the slice
+        low1 = frames.get("low1") if count >= cls.MIN_FRAMES_LOW1 else None
+        low01 = frames.get("low01") if count >= cls.MIN_FRAMES_LOW01 else None
+        ms = lambda f: 1000.0 / f if f else None
         return {
             "game": meta["game"], "start": meta["start"], "end": meta["end"],
             "duration": meta["end"] - meta["start"], "samples": n,
             "cpu_name": meta.get("cpu_name", ""), "gpu_name": meta.get("gpu_name", ""),
-            "avg_fps": (1000.0 * frames["count"] / frames["total_ms"]
-                        if frames.get("total_ms") else None),
-            "low1": frames.get("low1"), "low01": frames.get("low01"),
-            "frames": frames.get("count", 0),
+            "avg_fps": avg_fps, "low1": low1, "low01": low01, "frames": count,
+            # frame time (ms): average, and the slowest 1 % / 0.1 % of frames
+            "ft": [ms(avg_fps), ms(low1), ms(low01)],
+            "c_pow": [a(c.get("c_pow", [])), cls.mx(c.get("c_pow", []))],
+            "g_pow": [a(c.get("g_pow", [])), cls.mx(c.get("g_pow", []))],
+            "plan": meta.get("plan", ""), "driver": meta.get("driver", ""),
             "c_use": [a(c["c_use"]), cls.mx(c["c_use"])],
             "g_use": [a(c["g_use"]), cls.mx(c["g_use"])],
             "ram": [a(c["ram"]), cls.mx(c["ram"])],
@@ -3044,7 +3171,7 @@ class SessionRecorder:
     SKIP_APPS = {"system idle process", "system", "registry", "memcompression",
                  "presentmon.exe", "lmonitor.exe", "python.exe", "pythonw.exe",
                  "searchindexer.exe", "msmpeng.exe"}
-    KEYS = ("t", "fps", "c_use", "c_temp", "c_clk", "g_use", "g_temp", "g_clk",
+    KEYS = ("t", "fps", "c_use", "c_temp", "c_clk", "c_pow", "g_use", "g_temp", "g_clk",
             "g_pow", "vram", "vram_total", "ram", "avail")
 
     def __init__(self, fps, cpu, gpu, store, enabled=lambda: True):
@@ -3058,6 +3185,7 @@ class SessionRecorder:
         self.last_id = None
         self.procs = {}             # psutil.Process objects (cpu% needs history)
         self._bg = None
+        self.extra = lambda: {}     # the backend adds the power plan / graphics driver
 
     # ---- scheduling
     def tick(self):
@@ -3109,7 +3237,14 @@ class SessionRecorder:
                         "last": base[:2], "last_frame": now, "n": 0,
                         "c": {k: [] for k in self.KEYS}, "apps": {},
                         "scans": 0, "approx": False, "hist": base[2],
-                        "sid": None}
+                        "sid": None, "extra": self._extra()}
+
+    def _extra(self):
+        try:
+            return dict(self.extra() or {})
+        except Exception:
+            Logger.error("session extra")
+            return {}
 
     def _sample(self, now):
         cur, fps = self.cur, self.fps
@@ -3127,9 +3262,9 @@ class SessionRecorder:
                 f = 1000.0 * dc / dms
                 cur["last_frame"] = now
         vm = psutil.virtual_memory()
-        ct = cc = None
+        ct = cc = cp = None
         try:
-            ct, _, cc, approx = self.cpu.read(True, False, True)
+            ct, cp, cc, approx = self.cpu.read(True, True, True)
             cur["approx"] = cur["approx"] or approx
         except Exception:
             Logger.error("session cpu")
@@ -3139,7 +3274,7 @@ class SessionRecorder:
         except Exception:
             Logger.error("session gpu")
         row = {"t": now, "fps": f, "c_use": self.load.read(), "c_temp": ct,
-               "c_clk": cc, "g_use": gu, "g_temp": gt, "g_clk": gk, "g_pow": gp,
+               "c_clk": cc, "c_pow": cp, "g_use": gu, "g_temp": gt, "g_clk": gk, "g_pow": gp,
                "vram": mem[0] if mem else None,
                "vram_total": mem[1] if mem else None,
                "ram": vm.percent, "avail": vm.available / 1024 ** 3}
@@ -3203,6 +3338,7 @@ class SessionRecorder:
                 "c_approx": cur["approx"], "apps": cur["apps"],
                 "scans": cur["scans"], "cpu_name": getattr(self.cpu, "name", ""),
                 "gpu_name": self.gpu.display_name()}
+        meta.update(cur.get("extra") or {})
         summary = SessionAnalyzer.summarize(cur["c"], meta, frames)
         summary["live"] = live
         try:
@@ -3337,6 +3473,283 @@ class SessionView:
                          f"of the PC's CPU or over {SessionAnalyzer.HEAVY_MB} MB. "
                          "Close what you do not need before playing.", "")
         return rows
+
+class Alerts:
+    """Warnings about things that really matter, in plain words - checked on every reading.
+
+    A problem must last a while before it is reported (no warning for one hot second),
+    an ongoing problem is reported once, and the same warning comes back at the earliest
+    after COOLDOWN seconds and only after the problem had gone away. Only real readings
+    are used: a missing sensor never raises (or hides) a warning by guessing."""
+    COOLDOWN = 15 * 60
+    CLEAR_AFTER = 60            # s the problem must be gone before it counts as over
+    KEEP = 20                   # recent warnings kept for the Hardware page
+
+    # key: (seconds it must last, title, what to do)
+    RULES = {
+        "cpu_hot": (30, "Your processor is running very hot.",
+                    "Make sure the air vents are free and the fans are clean. A laptop cools better on a hard surface."),
+        "gpu_hot": (30, "Your graphics card is running very hot.",
+                    "Make sure the air vents are free and the fans are clean, or lower the graphics settings a little."),
+        "gpu_throttle": (5, "Your graphics card is reducing its performance because of high temperature.",
+                         "Your games may run slower until it cools down. Clean the fans and vents and give it more air."),
+        "cpu_jump": (0, "Your processor heated up very fast without more work to do.",
+                     "A fan may have stopped or an air vent may be blocked. Check that the fans are spinning."),
+        "gpu_jump": (0, "Your graphics card heated up very fast without more work to do.",
+                     "A fan may have stopped or an air vent may be blocked. Check that the fans are spinning."),
+        "vram_full": (30, "Your graphics card's memory is almost full.",
+                      "The game may stutter. Lower the texture quality in the game's settings."),
+        "ram_full": (30, "Your PC is almost out of memory (RAM).",
+                     "Close programs you do not need, for example a browser with many tabs."),
+        "fps_drop": (3, "Your frame rate dropped a lot.",
+                     "Something took the PC's power away from the game. Open Sessions after playing to see what it was."),
+    }
+    # the tray message is made in Python, so its Persian text lives here (fa.js has the same)
+    FA = {
+        "cpu_hot": ("پردازنده خیلی داغ شده است.",
+                    "مطمئن شو دریچه‌های هوا باز و فن‌ها تمیز هستند. لپ‌تاپ روی سطح سفت بهتر خنک می‌شود."),
+        "gpu_hot": ("کارت گرافیک خیلی داغ شده است.",
+                    "مطمئن شو دریچه‌های هوا باز و فن‌ها تمیز هستند، یا تنظیمات گرافیک را کمی پایین بیاور."),
+        "gpu_throttle": ("کارت گرافیک به‌خاطر دمای بالا کارایی‌اش را کم کرده است.",
+                         "تا خنک شود بازی‌ها ممکن است کندتر اجرا شوند. فن‌ها و دریچه‌ها را تمیز کن و جای هوا بده."),
+        "cpu_jump": ("پردازنده بدون کار بیشتر، خیلی سریع داغ شد.",
+                     "شاید یک فن از کار افتاده یا دریچه‌ی هوا بسته شده است. چرخیدن فن‌ها را بررسی کن."),
+        "gpu_jump": ("کارت گرافیک بدون کار بیشتر، خیلی سریع داغ شد.",
+                     "شاید یک فن از کار افتاده یا دریچه‌ی هوا بسته شده است. چرخیدن فن‌ها را بررسی کن."),
+        "vram_full": ("حافظه‌ی کارت گرافیک تقریباً پر است.",
+                      "ممکن است بازی لگ بزند. کیفیت بافت‌ها (Texture) را در تنظیمات بازی پایین بیاور."),
+        "ram_full": ("رم کامپیوتر تقریباً پر شده است.",
+                     "برنامه‌هایی را که لازم نداری ببند، مثلاً مرورگری با تب‌های زیاد."),
+        "fps_drop": ("نرخ فریم خیلی افت کرد.",
+                     "چیزی توان کامپیوتر را از بازی گرفت. بعد از بازی در «جلسه‌ها» ببین چه بود."),
+    }
+    CPU_HOT, GPU_HOT = 96, 88           # °C, held for the rule's time
+    JUMP, JUMP_SECS, JUMP_LOAD = 20, 20, 25   # +20 °C within 20 s while the load rose < 25 points
+    VRAM_FULL, RAM_FULL = 0.95, 92
+    FPS_MIN_USUAL, FPS_FALL = 40, 0.5    # usual FPS of the last minute at least 40; now under half
+
+    def __init__(self):
+        self.since = {}             # key -> when the condition started
+        self.gone = {}              # key -> when it stopped
+        self.active = set()         # reported and not over yet
+        self.last = {}              # key -> when it was last reported
+        self.recent = deque(maxlen=self.KEEP)
+        self.hist = deque(maxlen=40)    # (t, c_temp, g_temp, c_use, g_use)
+        self.fps_hist = deque(maxlen=120)  # (t, fps of the game in front)
+        self.lock = threading.Lock()
+        self.pending = []           # new warnings for the window / tray
+
+    def _jump(self, now, i_temp, i_use):
+        """Temperature rose JUMP °C in JUMP_SECS while the load hardly changed."""
+        old = [h for h in self.hist if now - h[0] <= self.JUMP_SECS and h[i_temp] is not None]
+        if len(old) < 2:
+            return False
+        first, last = old[0], old[-1]
+        if last[0] - first[0] < 3:
+            return False
+        rise = last[i_temp] - first[i_temp]
+        u0, u1 = first[i_use], last[i_use]
+        return rise >= self.JUMP and u0 is not None and u1 is not None and abs(u1 - u0) < self.JUMP_LOAD
+
+    def conditions(self, snap, fps, now, thermal=None):
+        """Which problems are there right now. -> set of rule keys"""
+        ct, gt = snap.get("c_temp"), snap.get("g_temp")
+        cu, gu = snap.get("c_use"), snap.get("g_use")
+        self.hist.append((now, ct, gt, cu, gu))
+        on = set()
+        if ct is not None and ct >= self.CPU_HOT:
+            on.add("cpu_hot")
+        if gt is not None and gt >= self.GPU_HOT:
+            on.add("gpu_hot")
+        if thermal and gu is not None and gu >= 50:
+            on.add("gpu_throttle")
+        if self._jump(now, 1, 3):
+            on.add("cpu_jump")
+        if self._jump(now, 2, 4):
+            on.add("gpu_jump")
+        mem = snap.get("g_mem")
+        if mem and mem[1] and mem[0] / mem[1] >= self.VRAM_FULL:
+            on.add("vram_full")
+        r = snap.get("r_use")
+        if r is not None and r >= self.RAM_FULL:
+            on.add("ram_full")
+        if fps is not None:
+            self.fps_hist.append((now, fps))
+            past = [f for t, f in self.fps_hist if 5 < now - t <= 65]
+            if len(past) >= 10:
+                usual = sorted(past)[len(past) // 2]
+                if usual >= self.FPS_MIN_USUAL and fps < usual * self.FPS_FALL:
+                    on.add("fps_drop")
+        else:
+            self.fps_hist.clear()       # no game in front: start again
+        return on
+
+    def check(self, snap, fps, now=None, thermal=None):
+        """One reading. -> list of new warnings [{key, title, tip, t}]"""
+        now = time.time() if now is None else now
+        on = self.conditions(snap, fps, now, thermal)
+        new = []
+        with self.lock:
+            for key in self.RULES:
+                if key in on:
+                    self.since.setdefault(key, now)
+                    self.gone.pop(key, None)
+                    hold = self.RULES[key][0]
+                    if (key not in self.active and now - self.since[key] >= hold
+                            and now - self.last.get(key, -1e12) >= self.COOLDOWN):
+                        self.active.add(key)
+                        self.last[key] = now
+                        a = {"key": key, "title": self.RULES[key][1], "tip": self.RULES[key][2], "t": now}
+                        self.recent.appendleft(a)
+                        new.append(a)
+                else:
+                    self.since.pop(key, None)
+                    if key in self.active:
+                        g = self.gone.setdefault(key, now)
+                        if now - g >= self.CLEAR_AFTER:
+                            self.active.discard(key)
+                            self.gone.pop(key, None)
+            self.pending.extend(new)
+        return new
+
+    def take(self):
+        """New warnings since the last call (the window shows them next to the clock)."""
+        with self.lock:
+            out, self.pending = self.pending, []
+        return out
+
+
+class SessionReport:
+    """What the Sessions page shows for one game: the important numbers first, in plain
+    words what was noticed, and a comparison of two sessions. Only measured values;
+    None means "not measured" and is never filled in with a guess."""
+
+    @staticmethod
+    def _m(pair, i):
+        return pair[i] if isinstance(pair, (list, tuple)) and len(pair) > i else None
+
+    @classmethod
+    def tiles(cls, s):
+        """The main numbers. value None = not measured."""
+        m = cls._m
+        return [
+            {"key": "avg_fps", "label": "Average FPS", "value": s.get("avg_fps"), "unit": ""},
+            {"key": "low1", "label": "1% low FPS", "value": s.get("low1"), "unit": ""},
+            {"key": "low01", "label": "0.1% low FPS", "value": s.get("low01"), "unit": ""},
+            {"key": "duration", "label": "Played", "value": s.get("duration"), "unit": "time"},
+            {"key": "c_temp", "label": "CPU hottest", "value": m(s.get("c_temp"), 1), "unit": "°C"},
+            {"key": "g_temp", "label": "GPU hottest", "value": m(s.get("g_temp"), 1), "unit": "°C"},
+            {"key": "c_pow", "label": "CPU power (average)", "value": m(s.get("c_pow"), 0), "unit": "W"},
+            {"key": "g_pow", "label": "GPU power (average)", "value": m(s.get("g_pow"), 0), "unit": "W"},
+        ]
+
+    # (summary key, status) -> (severity, what happened, what to do)
+    PLAIN = (
+        ("gpu_status", "possible", "GPU temperature / clock", "warn",
+         "Your graphics card slowed itself down because it got too hot.",
+         "Clean the fans and air vents, keep a laptop on a hard surface or a cooling pad, "
+         "or lower the graphics settings a little."),
+        ("cpu_status", "possible", "CPU temperature / clock", "warn",
+         "Your processor slowed itself down because it got too hot.",
+         "Clean the fans and air vents and make sure air can get in and out. "
+         "Old thermal paste can also cause this."),
+        ("mem_status", "low", "RAM", "warn",
+         "Your PC ran low on memory (RAM). This can cause stutters.",
+         "Close programs you do not need (a browser with many tabs) before playing."),
+    )
+
+    @classmethod
+    def noticed(cls, s):
+        """[{sev, text, tip, more}] - what was found, in plain words, worst first."""
+        out = []
+        more = {f["title"]: f["text"] for f in s.get("findings", [])}
+        for key, status, src, sev, text, tip in cls.PLAIN:
+            if s.get(key) == status:
+                out.append({"sev": sev, "text": text, "tip": tip, "more": more.get(src, "")})
+        for f in s.get("findings", []):
+            if f["title"] == "VRAM" and f["sev"] == "notice":
+                out.append({"sev": "notice", "text": "The graphics card's memory was almost full.",
+                            "tip": "Lower the texture quality in the game's settings.", "more": f["text"]})
+        if s.get("apps"):
+            names = ", ".join(a["name"] for a in s["apps"][:3])
+            out.append({"sev": "notice", "text": "Other programs used a lot of your PC while you played.",
+                        "tip": "Close what you do not need before playing: " + names + ".",
+                        "more": "Listed: average over %.0f %% of the CPU or over %d MB of memory."
+                                % (SessionAnalyzer.HEAVY_CPU, SessionAnalyzer.HEAVY_MB)})
+        drops = s.get("drops") or []
+        if drops:
+            worst = min(drops, key=lambda e: e["low"] / e["before"])
+            out.append({"sev": "notice", "text": "The frame rate dropped sharply %d time(s)." % len(drops),
+                        "tip": "",
+                        "more": "Worst: %.0f -> %.0f FPS. %s" % (worst["before"], worst["low"], worst["cause"])})
+        out.sort(key=lambda x: x["sev"] != "warn")
+        return out
+
+    @staticmethod
+    def verdict(s, noticed):
+        if s.get("avg_fps") is None:
+            return "The frame rate was not measured for this game, so only temperatures and load are shown."
+        if not noticed:
+            return "A smooth session: nothing slowed the game down."
+        if any(n["sev"] == "warn" for n in noticed):
+            return "Something slowed the game down - see below."
+        return "Mostly fine, with a few things worth knowing."
+
+    # ---- two sessions side by side
+    MIN_COMPARE_SECS = 120          # shorter sessions vary too much to compare
+    SAME_FPS, SAME_TEMP, SAME_POW = 3.0, 2.0, 3.0   # smaller differences = "about the same"
+
+    @classmethod
+    def compare(cls, a, b, changes=()):
+        """Two session summaries; the older one is "before".
+        -> {ok, note, rows: [{label, before, after, unit, text, better}], changed: [text]}"""
+        if a["start"] > b["start"]:
+            a, b = b, a
+        res = {"ok": False, "note": "", "rows": [], "changed": []}
+        if a.get("game") != b.get("game"):
+            res["note"] = ("These are two different games, so the numbers cannot be compared fairly. "
+                           "Pick two sessions of the same game.")
+            return res
+        if min(a.get("duration") or 0, b.get("duration") or 0) < cls.MIN_COMPARE_SECS:
+            res["note"] = "One of the sessions is shorter than 2 minutes - too short for a fair comparison."
+            return res
+        m, rows = cls._m, []
+
+        def row(label, va, vb, unit, noun, same, pct, higher_better):
+            if va is None or vb is None or (pct and va <= 0):
+                return
+            d = (vb - va) / va * 100 if pct else vb - va
+            if abs(d) < same:
+                text, better = "Your %s stayed about the same." % noun, None
+            else:
+                text = "Your %s %s by %.0f %s." % (noun, "increased" if d > 0 else "decreased", abs(d),
+                                                   "%" if pct else unit)
+                better = (d > 0) == higher_better
+            rows.append({"label": label, "before": va, "after": vb, "unit": unit, "text": text, "better": better})
+
+        row("Average FPS", a.get("avg_fps"), b.get("avg_fps"), "", "average FPS", cls.SAME_FPS, True, True)
+        row("1% low FPS", a.get("low1"), b.get("low1"), "", "1% low FPS", cls.SAME_FPS, True, True)
+        row("CPU temperature", m(a.get("c_temp"), 0), m(b.get("c_temp"), 0), "°C",
+            "average CPU temperature", cls.SAME_TEMP, False, False)
+        row("GPU temperature", m(a.get("g_temp"), 0), m(b.get("g_temp"), 0), "°C",
+            "average GPU temperature", cls.SAME_TEMP, False, False)
+        row("CPU power", m(a.get("c_pow"), 0), m(b.get("c_pow"), 0), "W", "average CPU power", cls.SAME_POW, False, False)
+        row("GPU power", m(a.get("g_pow"), 0), m(b.get("g_pow"), 0), "W", "average GPU power", cls.SAME_POW, False, False)
+        res["rows"], res["ok"] = rows, bool(rows)
+        if not rows:
+            res["note"] = "Not enough measured values in both sessions to compare."
+        ch = []                         # what changed in between - only what Lmonitor knows for sure
+        if a.get("driver") and b.get("driver") and a["driver"] != b["driver"]:
+            ch.append("Graphics driver: %s -> %s" % (a["driver"], b["driver"]))
+        if a.get("plan") and b.get("plan") and a["plan"] != b["plan"]:
+            ch.append("Power plan: %s -> %s" % (a["plan"], b["plan"]))
+        end_a = a["start"] + (a.get("duration") or 0)
+        for c in changes:
+            if end_a <= c.get("t", 0) <= b["start"] and c.get("status") in ("applied", "reverted") and c.get("title"):
+                ch.append(c["title"])
+        res["changed"] = ch[:8]
+        return res
+
 
 # =============================================================== Diagnostics
 class ScanStore:
@@ -5210,9 +5623,13 @@ class Telemetry:
 
     # ---- text rows for the Hardware page
     # ("head", title) | ("row", label, value[, color]) | ("bar", label, value, frac)
+    STOPPED = "n/a (the sensor stopped answering - no old value is shown)"
+
     def _cpu_hint(self, v):
         if v is not None:
             return None
+        if self.cpu.stale:
+            return self.STOPPED
         if self.cpu.available and not self.driver_ok():
             return "n/a (PawnIO driver missing)"
         if not self.cpu.available:
@@ -5252,7 +5669,7 @@ class Telemetry:
                 ("row", "Driver", self._gpu_driver()),
                 ("row", "Usage", fmt_value(s.get("g_use"), ".0f", " %"),
                  Thresholds.use(s.get("g_use"))),
-                ("row", "Temperature", fmt_value(s.get("g_temp"), ".0f", " °C"),
+                ("row", "Temperature", self._gpu_hint(s.get("g_temp")) or fmt_value(s.get("g_temp"), ".0f", " °C"),
                  Thresholds.temp(s.get("g_temp"))),
                 ("row", "Clock", fmt_value(s.get("g_clk"), ".0f", " MHz")),
                 ("row", "Power", fmt_value(s.get("g_pow"), ".0f", " W"))]
@@ -5262,6 +5679,9 @@ class Telemetry:
         if s.get("g_fan") is not None:
             rows.append(("row", "Fan", f"{s['g_fan']:.0f} %"))
         return rows
+
+    def _gpu_hint(self, v):
+        return self.STOPPED if v is None and self.gpu.stale else None
 
     def _gpu_driver(self):
         inf = self.info

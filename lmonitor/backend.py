@@ -17,7 +17,8 @@ from lmonitor.engine import (AppInfo, BackgroundReader, CardStatus, ChangeLog, C
                              DiagRunner, FpsMonitor, GpuReader, LibreHardwareHost,
                              Logger, MemoryReader, ReportBuilder,
                              ScanStore, SessionAnalyzer, Settings, Telemetry,
-                             Theme, WinApi, GameSettings, fmt_net, Profiles, NetUsage, NetMeter, WhatsNew)
+                             Theme, WinApi, GameSettings, fmt_net, Profiles, NetUsage, NetMeter, WhatsNew,
+                             Alerts, SessionReport)
 
 HW_TABS = (("CPU / GPU", "rows_processor"), ("Memory", "rows_memory"),
            ("Storage", "rows_storage"), ("Network", "rows_network"),
@@ -52,6 +53,9 @@ class Backend:
         self.reports = Reports(self.scanner.store, self.session_store, self.change_log)
         self.sessions = SessionRecorder(self.fps, self.cpu, self.gpu, self.session_store,
                                         lambda: self.settings["sessions_on"])
+        self.sessions.extra = self.session_extra
+        self.alerts = Alerts()
+        self.game, self._game_cand = None, None     # (pid, name) of the game that runs now
         self._sys_cache, self._sys_t, self._fps_try = {}, 0.0, 0.0
         # graph overlay: its own short history (5 min at most, 4 readings/s in real time)
         self.hud_hist = GraphHistory(keys=self.HUD_KEYS, keep=330)
@@ -93,7 +97,12 @@ class Backend:
     # ---- worker-thread side
     def sample(self):
         """One telemetry reading (call from a worker thread, never the UI)."""
-        self.telemetry.sample()
+        snap = self.telemetry.sample()
+        if self.settings["alerts_on"]:
+            try:
+                self.alerts.check(snap, self._game_fps(), thermal=self.gpu.thermal)
+            except Exception:
+                Logger.error("alerts")
         # the real-time charts read the graph-overlay history: while nothing fast runs (another
         # page open, graph overlay off) it gets this once-a-second reading, so coming back to
         # a real-time chart shows a line, not a hole
@@ -102,6 +111,74 @@ class Backend:
         fans = ({n: v for _, _, st, n, v in self.telemetry.sensors.read() if st == "Fan"}
                 if self.graph_fans else None)
         self.graphs.add(self.telemetry.snap, fans, time.time())
+
+    def _game_fps(self):
+        """Frame rate of the game in front right now, or None (no game / not measured)."""
+        try:
+            if not self.fps.alive:
+                return None
+            cur = self.fps.current()
+            if cur is None or cur[1].lower() in SessionRecorder.IGNORE:
+                return None
+            snap = self.fps.snapshot(False)
+            return snap[0] if snap and snap[0] else None
+        except Exception:
+            return None
+
+    @staticmethod
+    def game_name(exe):
+        """'FortniteClient-Win64-Shipping.exe' -> 'FortniteClient-Win64-Shipping'"""
+        exe = exe or ""
+        return exe[:-4] if exe.lower().endswith(".exe") else exe
+
+    def session_extra(self):
+        """Saved with every session, to explain a difference later: power plan, graphics driver."""
+        inf = self.telemetry.info
+        drv = inf.nvidia_driver or (inf.gpu_drivers[0][1] if inf.gpu_drivers else "")
+        return {"plan": self._plan or "", "driver": drv or ""}
+
+    # ---- every game keeps its own overlay settings (see Settings.begin_game)
+    GAME_AFTER = 6.0            # s a program must draw frames in front before it counts as a game
+
+    def game_tick(self, now=None):
+        """Every 2 s: did a game start or end? -> True when the overlay settings changed."""
+        now = time.monotonic() if now is None else now
+        st = self.settings
+        if self.game is not None:
+            pid, name = self.game
+            try:
+                alive = psutil.pid_exists(pid)
+            except Exception:
+                alive = True
+            if not alive or not st["profiles_on"]:
+                self.game = None
+                return st.end_game()
+            return False
+        if not st["profiles_on"] or not self.fps.alive:
+            self._game_cand = None
+            return False
+        cur = self.fps.current()
+        if cur is None or cur[1].lower() in SessionRecorder.IGNORE:
+            self._game_cand = None
+            return False
+        if self._game_cand is None or self._game_cand[0] != cur[0]:
+            self._game_cand = (cur[0], cur[1], now)
+            return False
+        if now - self._game_cand[2] < self.GAME_AFTER:
+            return False
+        self.game, self._game_cand = (cur[0], cur[1]), None
+        return st.begin_game(cur[1])
+
+    def game_profile(self):
+        """For the Overlay page: is a game running, does it have its own settings."""
+        st = self.settings
+        name = st.game
+        return {"on": bool(st["profiles_on"]), "game": self.game_name(name),
+                "has_own": bool(name and name in st["game_profiles"]),
+                "count": len(st["game_profiles"])}
+
+    def forget_game_profile(self):
+        self.settings.forget_game(self.settings.game)
 
     def graph_series(self, seconds):
         """Lines for the charts of the window. seconds = 0: real time (the last 10 s, from
@@ -325,6 +402,10 @@ class Backend:
         cfg = deepcopy(self.settings.data)
         cfg[key] = value
         self.settings.data.update(Settings._clean(cfg))
+        self.settings.note_change([key])
+        if key == "profiles_on" and not value and self.settings.game:
+            self.game = None
+            self.settings.end_game()
         self.overlay_changed()
         return True
 
@@ -337,6 +418,7 @@ class Backend:
         cfg = deepcopy(self.settings.data)
         cfg.update(values)
         self.settings.data.update(Settings._clean(cfg))
+        self.settings.note_change(list(values))
         self.overlay_changed()
         return True
 
@@ -344,6 +426,7 @@ class Backend:
         if key not in Metrics.KEYS:
             return False
         self.settings.data["show"][key] = bool(on)
+        self.settings.note_change(["show"])
         self.overlay_changed()
         return True
 
@@ -352,6 +435,7 @@ class Backend:
         if show is None:
             return False
         self.settings.data["show"] = show
+        self.settings.note_change(["show"])
         self.overlay_changed()
         return True
 
@@ -366,11 +450,13 @@ class Backend:
 
     def set_order(self, order):
         self.settings.data["order"] = Metrics.clean_order(order)
+        self.settings.note_change(["order"])
 
     def reset_settings(self):
         """Overlay settings back to the start; the window's look and language stay."""
         keep = {k: self.settings[k] for k in ("ui_mode", "ui_accent", "ui_scale", "language")}
         self.settings.reset()
+        self.game = None
         self.settings.data.update(keep)
 
     def save_settings(self):
@@ -411,7 +497,7 @@ class Backend:
     def ensure_fps(self, overlay_wants_fps):
         """PresentMon runs only while something needs it (FPS in the bar, or
         session recording). Retried at most every 10 seconds."""
-        want = bool(overlay_wants_fps or self.settings["sessions_on"])
+        want = bool(overlay_wants_fps or self.settings["sessions_on"] or self.settings["profiles_on"])
         if want and not self.fps.alive:
             now = time.monotonic()
             if now - self._fps_try >= 10:
@@ -676,12 +762,44 @@ class Backend:
         items = []
         for s in self.session_store.list():
             sm = s["summary"]
-            items.append({"id": s["id"], "game": s["game"], "when": self._when(s["start"]),
+            items.append({"id": s["id"], "game": self.game_name(s["game"]), "when": self._when(s["start"]),
                           "duration": SessionView.clock(s["duration"]),
                           "avg_fps": sm.get("avg_fps"), "low1": sm.get("low1"),
                           "live": bool(sm.get("live"))})
         return {"status": status, "recording": rec, "enabled": bool(self.settings["sessions_on"]),
                 "items": items}
+
+    def _summary(self, sid):
+        return next((x["summary"] for x in self.session_store.list() if x["id"] == sid), None)
+
+    def session_report(self, sid):
+        """The report of one session: main numbers, plain findings, details on request."""
+        sm = self._summary(sid)
+        if sm is None:
+            return {}
+        noticed = SessionReport.noticed(sm)
+        tiles = SessionReport.tiles(sm)
+        for t in tiles:
+            v = t["value"]
+            t["text"] = (None if v is None else SessionView.clock(v) if t["unit"] == "time"
+                         else "%.0f" % v)
+        return {"id": sid, "game": self.game_name(sm["game"]), "exe": sm["game"],
+                "when": self._when(sm["start"]), "live": bool(sm.get("live")),
+                "verdict": SessionReport.verdict(sm, noticed), "noticed": noticed, "tiles": tiles,
+                "ft": [None if v is None else round(v, 1) for v in (sm.get("ft") or [None] * 3)],
+                "details": self.session_detail(sid)}
+
+    def session_compare(self, a, b):
+        sa, sb = self._summary(a), self._summary(b)
+        if sa is None or sb is None:
+            return {"ok": False, "note": "One of the sessions is gone.", "rows": [], "changed": []}
+        r = SessionReport.compare(sa, sb, self.change_log.load())
+        old, new = (sa, sb) if sa["start"] <= sb["start"] else (sb, sa)
+        r["before"], r["after"] = self._when(old["start"]), self._when(new["start"])
+        for row in r["rows"]:
+            row["before_text"] = "%.0f%s" % (row["before"], (" " + row["unit"]) if row["unit"] else "")
+            row["after_text"] = "%.0f%s" % (row["after"], (" " + row["unit"]) if row["unit"] else "")
+        return r
 
     def session_detail(self, sid):
         """Sections of one session: summary, findings, drops, apps."""

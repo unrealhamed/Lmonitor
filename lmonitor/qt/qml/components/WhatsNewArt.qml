@@ -240,9 +240,96 @@ Item {
         }
     }
 
+    // ---- game report: the numbers count up, then two sessions compare (one bar grows)
+    Item {
+        visible: art.kind === "report"
+        anchors.centerIn: parent; width: 300; height: 150
+        Repeater {
+            model: 4
+            Rectangle {
+                readonly property real g: art.step(0.05 + index * 0.06, 0.35 + index * 0.06)
+                x: (index % 2) * 104; y: 10 + Math.floor(index / 2) * 62; width: 96; height: 54; radius: 8
+                color: Tokens.card; border.width: 1; border.color: Tokens.line; opacity: Math.min(1, g * 2)
+                Text { x: 8; y: 6; text: ["FPS", "1% low", "GPU", "CPU"][index]; color: Tokens.dim
+                       font.family: Tokens.font; font.pixelSize: 10 }
+                Text { x: 8; y: 22; text: Math.round([144, 98, 71, 83][index] * parent.g) + (index >= 2 ? "°" : "")
+                       color: Tokens.text; font.family: Tokens.fontDisplay; font.pixelSize: 20; font.weight: Font.DemiBold }
+            }
+        }
+        Repeater {
+            model: 2
+            Item {
+                readonly property real g: art.step(0.5, 0.8)
+                x: 214; y: 20 + index * 60; width: 80; height: 50
+                Text { text: index === 0 ? "before" : "after"; color: Tokens.dim; font.family: Tokens.font; font.pixelSize: 10 }
+                Rectangle { y: 18; height: 14; radius: 4; color: index === 0 ? Tokens.fg(0.25) : Tokens.accent
+                            width: (index === 0 ? 50 : 50 + 22 * parent.g) }
+            }
+        }
+    }
+
+    // ---- warnings: a temperature line climbs, a warning pops up once
+    Item {
+        visible: art.kind === "alerts"
+        anchors.centerIn: parent; width: 300; height: 150
+        readonly property real g: art.step(0.05, 0.55)
+        Canvas {
+            x: 0; y: 20; width: 300; height: 110
+            readonly property real f: parent.g
+            onFChanged: requestPaint()
+            onPaint: {
+                var c = getContext("2d"); c.reset(); c.lineWidth = 3; c.strokeStyle = Tokens.warn; c.beginPath()
+                var n = Math.max(2, Math.round(30 * f))
+                for (var i = 0; i < n; ++i) { var x = i * 10, y = 95 - 70 * Math.pow(i / 29, 1.6) + 4 * Math.sin(i)
+                                              if (i === 0) c.moveTo(x, y); else c.lineTo(x, y) }
+                c.stroke()
+            }
+        }
+        Rectangle {
+            readonly property real p: art.step(0.55, 0.7)
+            x: 70; y: 6; width: 220; height: 40; radius: 10; opacity: p; scale: 0.9 + 0.1 * p
+            color: Tokens.card; border.width: 1; border.color: Tokens.warn
+            Text { x: 12; anchors.verticalCenter: parent.verticalCenter; text: ""; color: Tokens.warn
+                   font.family: Tokens.iconFont; font.pixelSize: 16 }
+            Rectangle { x: 38; y: 12; width: 150; height: 6; radius: 3; color: Tokens.fg(0.35) }
+            Rectangle { x: 38; y: 23; width: 110; height: 5; radius: 3; color: Tokens.fg(0.18) }
+        }
+    }
+
+    // ---- settings for each game: two game icons, the overlay changes with each
+    Item {
+        visible: art.kind === "profiles"
+        anchors.centerIn: parent; width: 300; height: 150
+        readonly property bool second: art.t > 0.5
+        Repeater {
+            model: 2
+            Rectangle {
+                readonly property bool on: (index === 1) === parent.second
+                x: 20; y: 18 + index * 64; width: 52; height: 52; radius: 12
+                color: on ? Tokens.accentA(0.2) : Tokens.fg(0.06); border.width: on ? 2 : 1
+                border.color: on ? Tokens.accent : Tokens.line
+                Text { anchors.centerIn: parent; text: ""; color: parent.on ? Tokens.accent : Tokens.dim
+                       font.family: Tokens.iconFont; font.pixelSize: 22 }
+                Behavior on border.width { NumberAnimation { duration: 150 } }
+            }
+        }
+        Rectangle {
+            x: 100; y: 18; width: 180; height: 116; radius: 10; color: Tokens.bg0; border.width: 1; border.color: Tokens.line
+            Rectangle {
+                x: parent.parent.second ? 104 : 10; y: 10; width: parent.parent.second ? 64 : 150
+                height: parent.parent.second ? 90 : 18; radius: 5; color: "#cc000000"
+                Behavior on x { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+                Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+                Behavior on height { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+                Rectangle { x: 6; y: 6; width: 30; height: 5; radius: 2; color: Tokens.green }
+            }
+        }
+    }
+
     // ---- anything else: a calm pulse
     Rectangle {
-        visible: ["netusage", "hours", "meter", "frametime", "smooth", "design", "lightdark", "dashboard", "simple"].indexOf(art.kind) < 0
+        visible: ["netusage", "hours", "meter", "frametime", "smooth", "design", "lightdark", "dashboard", "simple",
+                  "report", "alerts", "profiles"].indexOf(art.kind) < 0
         anchors.centerIn: parent; width: 60 + 20 * Math.sin(art.t * 2 * Math.PI); height: width; radius: width / 2
         color: Tokens.accentA(0.25); border.width: 2; border.color: Tokens.accent
     }

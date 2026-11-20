@@ -6,6 +6,7 @@ The engine classes do the work in their own worker threads and expose
 tool page is open and hands finished plain dictionaries to QML. Nothing is
 polled while no tool page is open.
 """
+import os
 import time
 
 from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
@@ -247,6 +248,67 @@ class Tools(QObject):
         self._bump("reports")
 
     # ---- Sessions
+    @Slot(int, result="QVariantMap")
+    def sessionReport(self, sid):
+        try:
+            return self._b.session_report(sid)
+        except Exception:
+            Logger.error("qt session report")
+            return {}
+
+    @Slot(int, int, result="QVariantMap")
+    def sessionCompare(self, a, b):
+        try:
+            return self._b.session_compare(a, b)
+        except Exception:
+            Logger.error("qt session compare")
+            return {"ok": False, "note": "", "rows": [], "changed": []}
+
+    @Slot(str, result=str)
+    def sessionImagePath(self, game):
+        """Where a saved report picture goes: Pictures\\Lmonitor\\<game> <date>.png"""
+        import re
+        import time as _t
+        pics = os.path.join(os.path.expanduser("~"), "Pictures", "Lmonitor")
+        try:
+            os.makedirs(pics, exist_ok=True)
+        except OSError:
+            pics = os.path.join(os.path.expanduser("~"), "Desktop")
+        safe = re.sub(r'[\\/:*?"<>|]+', "_", game or "session")[:60].strip() or "session"
+        return os.path.join(pics, "%s %s.png" % (safe, _t.strftime("%Y-%m-%d %H-%M-%S")))
+
+    @Slot(float, float, float, float, str, result=bool)
+    def saveWindowArea(self, x1, y1, x2, y2, path):
+        """Save a part of the main window as a picture (exactly what is on screen, so a
+        Persian report looks the same as in the window)."""
+        try:
+            import shiboken6
+            from PySide6.QtGui import QGuiApplication
+            from PySide6.QtQuick import QQuickWindow
+            win = next((w for w in QGuiApplication.topLevelWindows() if w.title() == "Lmonitor"), None)
+            if win is None:
+                return False
+            qw = shiboken6.wrapInstance(shiboken6.getCppPointer(win)[0], QQuickWindow)
+            img = qw.grabWindow()
+            k = img.width() / max(1, qw.width())
+            left, top = min(x1, x2), min(y1, y2)
+            w, h = abs(x2 - x1), abs(y2 - y1)
+            part = img.copy(int(left * k), int(top * k), int(w * k), int(h * k))
+            return bool(part.save(path, "PNG"))
+        except Exception:
+            Logger.error("save report picture")
+            return False
+
+    @Slot(str)
+    def showFile(self, path):
+        """Open Explorer with the file selected."""
+        import subprocess
+        try:
+            if os.path.exists(path):
+                subprocess.Popen(["explorer", "/select,", os.path.normpath(path)])
+        except Exception:
+            Logger.error("show file")
+
     @Slot(int, result="QVariantList")
     def sessionDetail(self, sid):
         try:

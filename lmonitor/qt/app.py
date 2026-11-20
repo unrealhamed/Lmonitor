@@ -167,5 +167,8 @@ def _run():
                               "Version %s is available. Open Lmonitor to install it.") % version,
                              QSystemTrayIcon.MessageIcon.Information, 8000)
         bridge.updateFound.connect(told)
+        # a warning about the hardware (see engine.Alerts): shown next to the clock
+        bridge.alertRaised.connect(lambda title, tip: tray.showMessage(
+            title, tip, QSystemTrayIcon.MessageIcon.Warning, 10000))
     bridge.start()
     return app.exec()

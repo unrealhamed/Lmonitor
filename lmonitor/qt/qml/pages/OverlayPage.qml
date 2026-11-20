@@ -117,6 +117,31 @@ Item {
                             from: 40; to: 100; step: 5; value: s.alpha
                             onMoved: function (v) { backend.setSetting("alpha", v) } }
             }
+            Card {                                 // every game keeps its own overlay settings
+                id: profCard
+                readonly property var gp: backend.gameProfile
+                width: parent.width; height: profCol.height + 36
+                Column {
+                    id: profCol; x: 20; y: 16; width: parent.width - 40; spacing: 10
+                    Item { width: parent.width; height: 24
+                        Text { anchors.verticalCenter: parent.verticalCenter; width: parent.width - 60; elide: Text.ElideRight
+                               text: Tr.t("Settings for each game"); color: Tokens.text
+                               font.family: Tokens.font; font.pixelSize: 16; font.bold: true }
+                        ToggleSwitch { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                       checked: profCard.gp.on === true
+                                       onToggled: function (v) { backend.setSetting("profiles_on", v) } } }
+                    Text { width: parent.width; wrapMode: Text.WordWrap; color: Tokens.sub
+                           font.family: Tokens.font; font.pixelSize: Tokens.fsSmall
+                           text: !profCard.gp.on ? Tr.t("Off: every game uses the same overlay settings.")
+                                 : profCard.gp.game ? Tr.line(Tr.t("Playing now: ") + profCard.gp.game + Tr.t(". Changes you make now are kept for this game only."))
+                                 : Tr.t("Change the overlays while a game runs and that game keeps those settings. Other games use the normal ones.") }
+                    Text { visible: profCard.gp.on === true && profCard.gp.count > 0; color: Tokens.dim
+                           font.family: Tokens.font; font.pixelSize: Tokens.fsSmall
+                           text: Tr.line(profCard.gp.count + Tr.t(" game(s) have their own settings")) }
+                    Pill { visible: profCard.gp.has_own === true; label: Tr.t("Use the normal settings for this game")
+                           onClicked: backend.forgetGameProfile() }
+                }
+            }
         }
 
         Column {                                   // ---- column B

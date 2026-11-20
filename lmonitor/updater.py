@@ -26,6 +26,23 @@ def parse_version(text):
     return tuple(int(n) for n in m.group(1).split(".")) if m else None
 
 
+def clean_notes(body, max_lines=14):
+    """The release's own text, short and plain: no Markdown marks, no images, no links."""
+    out = []
+    for ln in str(body).replace("\r", "").split("\n"):
+        ln = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", ln)            # images
+        ln = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", ln)       # links -> their text
+        ln = re.sub(r"[*_`]+", "", ln).strip()
+        ln = re.sub(r"^#+\s*", "", ln)
+        if ln.startswith(("- ", "+ ")):
+            ln = "•  " + ln[2:]
+        if ln:
+            out.append(ln[:160])
+        if len(out) >= max_lines:
+            break
+    return "\n".join(out)
+
+
 def _get(url, opener, timeout=15):
     req = urllib.request.Request(url, headers={"User-Agent": "Lmonitor"})
     return opener(req, timeout=timeout)
@@ -53,6 +70,7 @@ def latest(current, opener=urllib.request.urlopen):
             digest = a.get("digest") or ""
             return {"version": ".".join(map(str, new)), "url": url, "name": a["name"],
                     "size": a.get("size"), "page": rel.get("html_url", ""),
+                    "notes": clean_notes(rel.get("body") or ""),
                     "sha256": digest[7:] if digest.startswith("sha256:") else None}
     return None
 
