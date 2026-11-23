@@ -411,12 +411,46 @@ var strings = {
     "Not enough measured values in both sessions to compare.": "در هر دو جلسه مقدار اندازه‌گیری‌شده‌ی کافی برای مقایسه نیست.",
     "One of the sessions is gone.": "یکی از جلسه‌ها دیگر وجود ندارد.",
     "Recording is off, so no game reports are made. Turn it on and play a game for a minute or longer - its report then appears here.": "ضبط بازی‌ها خاموش است، برای همین گزارشی ساخته نمی‌شود. روشنش کن و یک بازی را یک دقیقه یا بیشتر اجرا کن - گزارشش اینجا نشان داده می‌شود.",
-    "Turn on recording": "روشن کردن ضبط"
+    "Turn on recording": "روشن کردن ضبط",
+
+    // ---- 1.21.0: benchmark, limits, startup, history
+    "Run a benchmark": "اجرای بنچمارک",
+    "Cancel benchmark": "لغو بنچمارک",
+    "Benchmark": "بنچمارک",
+    "Benchmark: switch to your game - it starts by itself": "بنچمارک: به بازی برگرد - خودش شروع می‌شود",
+    "Compared with your earlier sessions of this game": "در مقایسه با جلسه‌های قبلی همین بازی",
+    "about the same as usual": "تقریباً مثل همیشه",
+    "Delete my history": "پاک کردن تاریخچه‌ی من",
+    "Delete game sessions, PC check results and network counts?": "جلسه‌های بازی، نتیجه‌های بررسی رایانه و شمارش شبکه پاک شوند؟",
+    "Deleted. Your settings were kept.": "پاک شد. تنظیماتت سر جایش ماند.",
+    "Your graphics card's performance may have been limited by its power settings.": "ممکن است تنظیمات توان کارت گرافیک، کارایی‌اش را محدود کرده باشد.",
+    "On a laptop: plug it in and choose a performance mode. On a desktop this is how the card is set up, and it is normal.": "در لپ‌تاپ: شارژر را وصل کن و حالت پرقدرت (Performance) را انتخاب کن. در کامپیوتر رومیزی کارت همین‌طور تنظیم شده و عادی است.",
+    "Your graphics card set the frame rate: it worked at full power most of the time.": "کارت گرافیک تعیین‌کننده‌ی نرخ فریم بود: بیشتر وقت با تمام توان کار کرد.",
+    "That is normal in demanding games. Lower graphics settings or resolution give more FPS.": "در بازی‌های سنگین عادی است. با پایین آوردن تنظیمات گرافیک یا رزولوشن FPS بیشتری می‌گیری.",
+    "Your graphics card often had power to spare, so something else set the frame rate.": "کارت گرافیک اغلب توان اضافه داشت، پس چیز دیگری نرخ فریم را تعیین کرد.",
+    "Other possible reasons: an FPS limit or V-Sync, or the game itself.": "دلیل‌های احتمالی دیگر: محدودیت FPS یا V-Sync، یا خود بازی.",
+    "The processor was very busy at the same time, so it is probably the limit. Other possible reasons: an FPS limit or V-Sync, or the game itself.": "پردازنده در همان لحظه‌ها خیلی مشغول بود، پس احتمالاً محدودکننده همان است. دلیل‌های احتمالی دیگر: محدودیت FPS یا V-Sync، یا خود بازی.",
+    "A benchmark and a normal session are not compared: pick two benchmarks or two sessions.": "بنچمارک با جلسه‌ی معمولی مقایسه نمی‌شود: دو بنچمارک یا دو جلسه انتخاب کن.",
+    "Windows update": "به‌روزرسانی ویندوز",
+    "Starts with Windows - reliably": "اجرا با ویندوز - مطمئن",
+    "If the Windows task for \"Start with Windows\" got lost, Lmonitor makes it again. And when the taskbar is not ready at sign-in, Lmonitor waits for it instead of running without an icon.": "اگر کار ویندوز برای «اجرا با ویندوز» گم شود، Lmonitor دوباره می‌سازدش. و اگر موقع ورود به ویندوز نوار پایین هنوز آماده نباشد، Lmonitor صبر می‌کند و بدون آیکون اجرا نمی‌شود.",
+    "Benchmark in one click": "بنچمارک با یک کلیک",
+    "Press Run a benchmark in Sessions and go back to your game: one minute is recorded the same way every time, so two runs are easy to compare.": "در «جلسه‌ها» «اجرای بنچمارک» را بزن و به بازی برگرد: یک دقیقه هر بار به یک شکل ضبط می‌شود، پس دو اجرا راحت مقایسه می‌شوند.",
+    "What limited your FPS": "چه چیزی FPS را محدود کرد",
+    "Each report now says whether the graphics card, its power settings or something else set the frame rate - only as sure as the measurements allow.": "هر گزارش حالا می‌گوید کارت گرافیک، تنظیمات توانش یا چیز دیگری نرخ فریم را تعیین کرد - فقط تا جایی که اندازه‌ها اجازه می‌دهند مطمئن.",
+    "Your PC, your data": "کامپیوتر تو، اطلاعات تو",
+    "The PC check report now lists your hardware, drivers and which sensors work. In About you can delete your history with one click.": "گزارش بررسی رایانه حالا سخت‌افزار، درایورها و سنسورهای فعال را هم دارد. در «درباره» با یک کلیک تاریخچه‌ات را پاک کن."
 };
 
 // Texts with numbers made by the engine: [pattern, Persian]. The Persian is a text with
 // $1, $2... or a function (tr, $1, $2...) where tr translates a part (a name, a word).
 var patterns = [
+    // 1.21.0
+    [/^Benchmark running: (.+) - (\d+) s left$/, "بنچمارک در حال اجرا: $1 - $2 ثانیه مانده"],
+    [/^(\d+) (%|°C) (higher|lower) than usual$/, function (tr, a, b, c) { return a + (b === "%" ? "٪" : " " + b) + (c === "higher" ? " بیشتر از همیشه" : " کمتر از همیشه") }],
+    [/^The graphics driver reported its power limit for (\d+) % of the time the card was busy\.$/, "درایور گرافیک در $1٪ از زمانی که کارت مشغول بود، محدودیت توان را گزارش کرد."],
+    [/^Graphics card at 95 % or more for (\d+) % of the game\.$/, "کارت گرافیک در $1٪ از زمان بازی روی ۹۵٪ یا بیشتر بود."],
+    [/^Graphics card under 75 % for (\d+) % of the game(?:; processor at 85 % or more in (\d+) % of those moments)?\.$/, function (tr, a, b) { return "کارت گرافیک در " + a + "٪ از زمان بازی زیر ۷۵٪ بود" + (b ? "؛ پردازنده در " + b + "٪ از همان لحظه‌ها روی ۸۵٪ یا بیشتر بود" : "") + "." }],
     // 1.20.0: session report and comparison
     [/^Your (.+) (increased|decreased) by (\d+) (%|°C|W)\.$/, function (tr, a, b, c, d) { var n = {"average FPS": "میانگین FPS", "1% low FPS": "FPS در ۱٪ کندترین لحظه‌ها", "average CPU temperature": "میانگین دمای CPU", "average GPU temperature": "میانگین دمای GPU", "average CPU power": "میانگین توان CPU", "average GPU power": "میانگین توان GPU"}[a] || a; return n + " " + c + (d === "%" ? "٪" : " " + d) + (b === "increased" ? " بیشتر شد." : " کمتر شد.") }],
     [/^Your (.+) stayed about the same\.$/, function (tr, a) { var n = {"average FPS": "میانگین FPS", "1% low FPS": "FPS در ۱٪ کندترین لحظه‌ها", "average CPU temperature": "میانگین دمای CPU", "average GPU temperature": "میانگین دمای GPU", "average CPU power": "میانگین توان CPU", "average GPU power": "میانگین توان GPU"}[a] || a; return n + " تقریباً همان ماند." }],

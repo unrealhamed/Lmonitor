@@ -158,8 +158,9 @@ def _run():
     if "failed" in gpu_note:
         from lmonitor.engine import Logger
         Logger.error("start", gpu_note)
-    tray = _make_tray(app, engine.rootObjects()[0], bridge, backend, ico)
-    if tray is not None:                         # a new version: say so next to the clock too
+    win = engine.rootObjects()[0]
+
+    def hook_tray(tray):
         def told(version):
             fa = backend.settings["language"] == "fa"
             tray.showMessage("Lmonitor",
@@ -170,5 +171,41 @@ def _run():
         # a warning about the hardware (see engine.Alerts): shown next to the clock
         bridge.alertRaised.connect(lambda title, tip: tray.showMessage(
             title, tip, QSystemTrayIcon.MessageIcon.Warning, 10000))
+        bridge.trayInfo.connect(lambda title, text: tray.showMessage(
+            title, text, QSystemTrayIcon.MessageIcon.Information, 6000))
+
+    # Started by Windows at sign-in, the taskbar is often not ready yet: then there was no
+    # icon at all and Lmonitor ran invisibly ("it does not start with Windows"). Now it
+    # tries again every 2 s for 3 minutes; if there is still no taskbar, the window opens.
+    tray = _make_tray(app, win, bridge, backend, ico)
+    if tray is not None:
+        hook_tray(tray)
+    else:
+        from PySide6.QtCore import QTimer
+        from lmonitor.engine import Logger
+        Logger.note("start", "no taskbar yet - waiting for it")
+        retry = QTimer(app)
+        retry.setInterval(2000)
+        tries = [0]
+
+        def again():
+            tries[0] += 1
+            t = _make_tray(app, win, bridge, backend, ico)
+            if t is not None:
+                retry.stop()
+                app._tray = t
+                hook_tray(t)
+                Logger.note("start", "taskbar icon made after %d s" % (tries[0] * 2))
+            elif tries[0] >= 90:
+                retry.stop()
+                Logger.note("start", "no taskbar after 3 minutes - window opened")
+                win.show()
+        retry.timeout.connect(again)
+        retry.start()
+        app._tray_retry = retry
+    from lmonitor.engine import Logger, AppInfo
+    Logger.note("start", "Lmonitor %s started %s%s" % (
+        AppInfo.VERSION, "by Windows at sign-in" if "--startup" in sys.argv else "by hand",
+        "" if WinApi.is_admin() else " (no administrator rights)"))
     bridge.start()
     return app.exec()

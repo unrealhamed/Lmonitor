@@ -49,6 +49,11 @@ Item {
     PageHeader {
         id: head; width: parent.width
         kicker: page.d.status || ""; title: Tr.t("Sessions")
+        // one minute of the game in front, recorded the same way every time: easy to compare
+        Pill { anchors.verticalCenter: parent.verticalCenter
+               label: page.d.bench ? Tr.t("Cancel benchmark") : Tr.t("Run a benchmark")
+               primary: !page.d.bench; danger: !!page.d.bench
+               onClicked: page.d.bench ? tools.benchStop() : tools.benchStart() }
         Text { text: Tr.t("Record games"); color: Tokens.sub; anchors.verticalCenter: parent.verticalCenter
                font.family: Tokens.font; font.pixelSize: Tokens.fsBody }
         ToggleSwitch { anchors.verticalCenter: parent.verticalCenter; checked: page.d.enabled === true
@@ -85,7 +90,7 @@ Item {
                        : (ma.containsMouse ? Tokens.fg(0.05) : "transparent")
                 border.width: isSel || isOther ? 1 : 0; border.color: isOther ? Tokens.info : Tokens.accent
                 Column { x: 14; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 28; spacing: 2
-                    Text { width: parent.width; elide: Text.ElideRight; text: modelData.game + (modelData.live ? Tr.t("  ● recording") : "")
+                    Text { width: parent.width; elide: Text.ElideRight; text: (modelData.bench ? Tr.t("Benchmark") + " · " : "") + modelData.game + (modelData.live ? Tr.t("  ● recording") : "")
                            color: Tokens.text; font.family: Tokens.font; font.pixelSize: 14; font.bold: true }
                     Text { text: modelData.when + "  ·  " + modelData.duration; color: Tokens.dim
                            font.family: Tokens.font; font.pixelSize: 10 }
@@ -141,6 +146,19 @@ Item {
                             }
                         }
                     }
+                    Column {                                 // the same game over time
+                        width: parent.width; spacing: 3
+                        visible: (page.rep.trend || []).length > 0
+                        Text { text: Tr.t("Compared with your earlier sessions of this game"); color: Tokens.text
+                               font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: true }
+                        Repeater {
+                            model: page.rep.trend || []
+                            Text { width: parent.width; wrapMode: Text.WordWrap
+                                   text: Tr.line(Tr.t(modelData.label) + ": " + Tr.t(modelData.text))
+                                   color: modelData.better === true ? Tokens.accent : modelData.better === false ? Tokens.warn : Tokens.sub
+                                   font.family: Tokens.font; font.pixelSize: Tokens.fsSmall }
+                        }
+                    }
                     Text { visible: !!page.rep.ft && page.rep.ft[0] !== null && page.rep.ft[0] !== undefined
                            width: parent.width; wrapMode: Text.WordWrap; color: Tokens.sub
                            font.family: Tokens.font; font.pixelSize: Tokens.fsSmall
@@ -160,7 +178,7 @@ Item {
                                 property bool open: false
                                 width: parent.width; height: nCol.height
                                 Rectangle { width: 8; height: 8; radius: 4; y: 6
-                                            color: modelData.sev === "warn" ? Tokens.warn : Tokens.info }
+                                            color: modelData.sev === "warn" ? Tokens.warn : modelData.sev === "notice" ? Tokens.info : Tokens.dim }
                                 Column {
                                     id: nCol; x: 18; width: parent.width - 18; spacing: 3
                                     Text { width: parent.width; wrapMode: Text.WordWrap; text: Tr.t(modelData.text); color: Tokens.text

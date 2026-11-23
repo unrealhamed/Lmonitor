@@ -18,7 +18,7 @@ from lmonitor.engine import (AppInfo, BackgroundReader, CardStatus, ChangeLog, C
                              Logger, MemoryReader, ReportBuilder,
                              ScanStore, SessionAnalyzer, Settings, Telemetry,
                              Theme, WinApi, GameSettings, fmt_net, Profiles, NetUsage, NetMeter, WhatsNew,
-                             Alerts, SessionReport)
+                             Alerts, SessionReport, windows_build, Paths)
 
 HW_TABS = (("CPU / GPU", "rows_processor"), ("Memory", "rows_memory"),
            ("Storage", "rows_storage"), ("Network", "rows_network"),
@@ -51,6 +51,7 @@ class Backend:
         self.optimizer = Optimizer(self.change_log)
         self.storage = Storage(self.change_log)
         self.reports = Reports(self.scanner.store, self.session_store, self.change_log)
+        self.reports.system = self.report_system
         self.sessions = SessionRecorder(self.fps, self.cpu, self.gpu, self.session_store,
                                         lambda: self.settings["sessions_on"])
         self.sessions.extra = self.session_extra
@@ -135,7 +136,7 @@ class Backend:
         """Saved with every session, to explain a difference later: power plan, graphics driver."""
         inf = self.telemetry.info
         drv = inf.nvidia_driver or (inf.gpu_drivers[0][1] if inf.gpu_drivers else "")
-        return {"plan": self._plan or "", "driver": drv or ""}
+        return {"plan": self._plan or "", "driver": drv or "", "windows": windows_build()}
 
     # ---- every game keeps its own overlay settings (see Settings.begin_game)
     GAME_AFTER = 6.0            # s a program must draw frames in front before it counts as a game
@@ -497,7 +498,8 @@ class Backend:
     def ensure_fps(self, overlay_wants_fps):
         """PresentMon runs only while something needs it (FPS in the bar, or
         session recording). Retried at most every 10 seconds."""
-        want = bool(overlay_wants_fps or self.settings["sessions_on"] or self.settings["profiles_on"])
+        want = bool(overlay_wants_fps or self.settings["sessions_on"] or self.settings["profiles_on"]
+                    or self.sessions.bench)
         if want and not self.fps.alive:
             now = time.monotonic()
             if now - self._fps_try >= 10:
@@ -765,8 +767,10 @@ class Backend:
             items.append({"id": s["id"], "game": self.game_name(s["game"]), "when": self._when(s["start"]),
                           "duration": SessionView.clock(s["duration"]),
                           "avg_fps": sm.get("avg_fps"), "low1": sm.get("low1"),
-                          "live": bool(sm.get("live"))})
+                          "live": bool(sm.get("live")), "bench": bool(sm.get("benchmark"))})
+        bench = self.sessions.bench
         return {"status": status, "recording": rec, "enabled": bool(self.settings["sessions_on"]),
+                "bench": bench["state"] if bench else "",
                 "items": items}
 
     def _summary(self, sid):
@@ -783,7 +787,10 @@ class Backend:
             v = t["value"]
             t["text"] = (None if v is None else SessionView.clock(v) if t["unit"] == "time"
                          else "%.0f" % v)
+        earlier = [x["summary"] for x in sorted(self.session_store.list(), key=lambda x: x["start"])
+                   if x["game"] == sm["game"] and x["start"] < sm["start"] and not x["summary"].get("live")]
         return {"id": sid, "game": self.game_name(sm["game"]), "exe": sm["game"],
+                "bench": bool(sm.get("benchmark")), "trend": SessionReport.trend(sm, earlier),
                 "when": self._when(sm["start"]), "live": bool(sm.get("live")),
                 "verdict": SessionReport.verdict(sm, noticed), "noticed": noticed, "tiles": tiles,
                 "ft": [None if v is None else round(v, 1) for v in (sm.get("ft") or [None] * 3)],
@@ -800,6 +807,66 @@ class Backend:
             row["before_text"] = "%.0f%s" % (row["before"], (" " + row["unit"]) if row["unit"] else "")
             row["after_text"] = "%.0f%s" % (row["after"], (" " + row["unit"]) if row["unit"] else "")
         return r
+
+    def clear_history(self):
+        """About > Delete my history: game sessions, PC check results and network counts.
+        Settings and the Optimizer's undo list stay (the list is needed to undo changes)."""
+        import os
+        done = []
+        for name, fn in (("sessions", self.session_store.clear), ("network", self.net_meter.clear)):
+            try:
+                fn()
+                done.append(name)
+            except Exception:
+                Logger.error("clear " + name)
+        try:
+            p = self.scanner.store.path
+            if os.path.exists(p):
+                os.remove(p)
+            self.scanner.issues, self.scanner.when, self.scanner.summary = [], None, None
+            done.append("scans")
+        except Exception:
+            Logger.error("clear scans")
+        self.reports.report = None
+        self._last_sess_t = 0.0
+        return done
+
+    # ---- what goes into the diagnostic report about this PC (no names, no serial numbers)
+    def report_system(self):
+        import os
+        import re
+        tel, inf = self.telemetry, self.telemetry.info
+        s = tel.snap or {}
+        def state(v, stale=False, ok=True):
+            if stale:
+                return "stopped answering"
+            return "available" if v is not None else ("not available" if ok else "not supported")
+        mem = s.get("g_mem")
+        errors = []
+        try:
+            with open(Paths.LOG_FILE, encoding="utf-8", errors="replace") as f:
+                for ln in f:
+                    m = re.match(r"\[(\d{4}-\d\d-\d\d) [\d:]+\] (.+)", ln)
+                    if m and m.group(2).strip():
+                        errors.append(m.group(1) + "  " + m.group(2).strip()[:60])
+        except OSError:
+            pass
+        return {
+            "cpu": self.host.cpu_name_raw or inf.cpu_registry or "",
+            "gpu": self.gpu.display_name() or (inf.gpu_drivers[0][0] if inf.gpu_drivers else ""),
+            "gpu_driver": inf.nvidia_driver or (inf.gpu_drivers[0][1] if inf.gpu_drivers else ""),
+            "ram_gb": round(psutil.virtual_memory().total / 1024 ** 3, 1),
+            "vram_gb": round(mem[1], 1) if mem else None,
+            "windows": "%s %s (build %s)" % (platform.system(), platform.release(), windows_build()),
+            "admin": bool(WinApi.admin),
+            "sensors": {"CPU temperature": state(s.get("c_temp"), self.cpu.stale),
+                        "CPU power": state(s.get("c_pow"), self.cpu.stale),
+                        "GPU temperature": state(s.get("g_temp"), self.gpu.stale),
+                        "GPU power": state(s.get("g_pow"), self.gpu.stale),
+                        "GPU memory": state(s.get("g_mem"), self.gpu.stale),
+                        "Frame rate (PresentMon)": "available" if self.fps.alive else "not running"},
+            "errors": errors[-10:], "error_count": len(errors),
+        }
 
     def session_detail(self, sid):
         """Sections of one session: summary, findings, drops, apps."""

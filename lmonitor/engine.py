@@ -328,6 +328,28 @@ class Thresholds:
 # =============================================================== Logger
 class Logger:
     _seen = set()
+    MAX = 200000                # bytes; then the log starts again (the old one is kept once)
+
+    @classmethod
+    def _write(cls, path, text):
+        os.makedirs(Paths.CFG_DIR, exist_ok=True)
+        if os.path.exists(path) and os.path.getsize(path) > cls.MAX:
+            old = path[:-4] + ".old.log"
+            try:
+                os.replace(path, old)       # before: logging simply stopped at 200 KB
+            except OSError:
+                return
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(text)
+
+    @classmethod
+    def note(cls, where, text):
+        """One line about starting / stopping (startup.log): helps when "it did not start"."""
+        try:
+            cls._write(os.path.join(Paths.CFG_DIR, "startup.log"),
+                       f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {where}: {text}\n")
+        except Exception:
+            pass
 
     @classmethod
     def error(cls, where="", text=None):
@@ -337,12 +359,7 @@ class Logger:
             if tb in cls._seen:
                 return
             cls._seen.add(tb)
-            os.makedirs(Paths.CFG_DIR, exist_ok=True)
-            if (os.path.exists(Paths.LOG_FILE)
-                    and os.path.getsize(Paths.LOG_FILE) > 200000):
-                return
-            with open(Paths.LOG_FILE, "a", encoding="utf-8") as f:
-                f.write(f"[{time.strftime('%H:%M:%S')}] {where}\n{tb}\n")
+            cls._write(Paths.LOG_FILE, f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {where}\n{tb}\n")
         except Exception:
             pass
 
@@ -376,6 +393,9 @@ class Settings:
                 # warnings next to the clock (see class Alerts); every game keeps its own
                 # overlay settings (see Settings.begin_game)
                 "alerts_on": True, "profiles_on": True, "game_profiles": {},
+                # "Start with Windows" as the user chose it (None = not known yet). Windows'
+                # task can get lost (an uninstall removes it); Lmonitor makes it again.
+                "autostart_on": None,
                 "order": Metrics.default_order(),
                 "show": {k: True for k in Metrics.KEYS}}
 
@@ -386,7 +406,7 @@ class Settings:
     DEFAULTS.update(hud2_pos="tl", hud2_items=["g_use", "c_use", "r_use"], hud2_theme="toxic")
     del _k
     EXTRA_KEYS = ("safe_mode", "ui_scale", "ui_mode", "seen_version", "alerts_on", "profiles_on",
-                  "game_profiles")
+                  "game_profiles", "autostart_on")
     # what a game's own settings may hold: how the overlays look and what they show
     PROFILE_KEYS = ("on", "pos", "x", "y", "monitor", "layout", "text", "graph", "alpha", "show",
                     "order", "show_mode", "hotkey_secs")
@@ -594,6 +614,8 @@ class Settings:
         cfg["weight"] = cfg["label_weight"] = "bold"
         if not isinstance(cfg["seen_version"], str) or len(cfg["seen_version"]) > 20:
             cfg["seen_version"] = ""
+        if cfg["autostart_on"] not in (None, True, False):
+            cfg["autostart_on"] = None
         cfg["alerts_on"] = bool(cfg["alerts_on"])
         cfg["profiles_on"] = bool(cfg["profiles_on"])
         profs, pk = cfg["game_profiles"], cls.profile_keys()
@@ -1109,7 +1131,8 @@ class BackgroundReader:
             self.fn()
             self.ok_at = time.monotonic()
         except Exception:
-            Logger.error(self.name)
+            if not BackgroundReader.stopped:     # the sensor library is being closed: expected
+                Logger.error(self.name)
         self.runs += 1
         self._last = time.monotonic()
 
@@ -1309,6 +1332,8 @@ class GpuReader:
     stale = False                                     # see BackgroundReader.stale
     thermal = None          # NVIDIA: the clock is held down because of heat (None = unknown)
     THERMAL_BITS = 0x20 | 0x40                        # SW / HW thermal slowdown (NVML)
+    power_limit = None      # NVIDIA: the clock is held down by the power limit (None = unknown)
+    POWER_BITS = 0x04 | 0x80                          # SW power cap / HW power brake (NVML)
     _lhm = False                                      # the sensor library is needed too
 
     def _reader(self):
@@ -1342,6 +1367,7 @@ class GpuReader:
                   or getattr(nv, "nvmlDeviceGetCurrentClocksThrottleReasons", None))
             r = self._q(fn) if fn is not None else None
             self.thermal = None if r is None else bool(int(r) & self.THERMAL_BITS)
+            self.power_limit = None if r is None else bool(int(r) & self.POWER_BITS)
         self._cache = (use, temp, pw, clk, mem, fan)
         if self._lhm:       # AMD / Intel, or what NVML could not read: the sensor library
             with HW_LOCK:
@@ -1531,6 +1557,34 @@ class Autostart:
             return cls._schtasks("/Query", "/TN", cls.TASK)[0] == 0
         except Exception:
             return False
+
+    @classmethod
+    def points_here(cls):
+        """Does the task start THIS Lmonitor.exe? (False if it is missing or points elsewhere,
+        e.g. after the program was installed in another folder.)"""
+        try:
+            code, out = cls._schtasks("/Query", "/TN", cls.TASK, "/XML")
+        except Exception:
+            return False
+        if code != 0:
+            return False
+        exe = cls.command()[0]
+        return os.path.normcase(exe) in os.path.normcase(out) or exe.lower() in out.lower()
+
+    @classmethod
+    def repair(cls, wanted):
+        """At every start of the installed program: the user wants Start with Windows but
+        the task is gone or points to another program -> make it again (needs admin, which
+        the installed Lmonitor has). Never from a source copy (it would take the task away
+        from the installed one). -> (on, error)"""
+        on = cls.is_on()
+        if not wanted or not getattr(sys, "frozen", False) or not WinApi.is_admin():
+            return on, ""
+        if on and cls.points_here():
+            return True, ""
+        Logger.note("autostart", "the Windows task was %s - made again" % ("pointing elsewhere" if on else "missing"))
+        err = cls.set(True)
+        return cls.is_on(), err
 
     @classmethod
     def set(cls, on):
@@ -1900,6 +1954,16 @@ class WhatsNew:
     frametime, smooth - or "generic"); "kind" is "new" or "fix". A version without an entry
     shows nothing. Texts are English; Persian ones are in fa.js."""
     ENTRIES = (
+        {"version": "1.21.0", "since": "1.20.2", "slides": (
+            {"art": "simple", "kind": "fix", "title": "Starts with Windows - reliably",
+             "text": "If the Windows task for \"Start with Windows\" got lost, Lmonitor makes it again. And when the taskbar is not ready at sign-in, Lmonitor waits for it instead of running without an icon."},
+            {"art": "report", "kind": "new", "title": "Benchmark in one click",
+             "text": "Press Run a benchmark in Sessions and go back to your game: one minute is recorded the same way every time, so two runs are easy to compare."},
+            {"art": "frametime", "kind": "new", "title": "What limited your FPS",
+             "text": "Each report now says whether the graphics card, its power settings or something else set the frame rate - only as sure as the measurements allow."},
+            {"art": "design", "kind": "new", "title": "Your PC, your data",
+             "text": "The PC check report now lists your hardware, drivers and which sensors work. In About you can delete your history with one click."},),
+         },
         {"version": "1.20.0", "since": "1.19.1", "slides": (
             {"art": "report", "kind": "new", "title": "A report after every game",
              "text": "Sessions now shows the main numbers first - FPS, 1% and 0.1% lows, temperatures, power - and what slowed the game down, in plain words. Compare two sessions to see if a change helped."},
@@ -1961,7 +2025,7 @@ class WhatsNew:
 class AppInfo:
     """Name / version shown in the Hardware > System tab."""
     NAME = "Lmonitor"
-    VERSION = "1.20.1"
+    VERSION = "1.21.0"
     PUBLISHER = ""      # put your name or company here (empty = "Not set")
     URL = "https://github.com/unrealhamed/Lmonitor"
 
@@ -2449,6 +2513,17 @@ class NetMeter:
         con.execute("CREATE TABLE IF NOT EXISTS slots (t INTEGER PRIMARY KEY, down INTEGER, up INTEGER)")
         return con
 
+    def clear(self):
+        """Forget every count (About > Delete my history)."""
+        with self._lock:
+            self._pending = {}
+            con = self._con()
+            try:
+                con.execute("DELETE FROM slots")
+                con.commit()
+            finally:
+                con.close()
+
     def tick(self, now=None):
         """One reading: the bytes since the last one go to the slot of `now`."""
         now = time.time() if now is None else now
@@ -2806,9 +2881,11 @@ class SensorReader:
 class SessionStore:
     """Finished game sessions in one small SQLite file in %APPDATA%\\Lmonitor.
 
-    A row holds the summary (JSON) and the samples (compressed JSON).
-    Only the newest KEEP sessions are kept."""
-    KEEP = 60
+    A row holds the summary (JSON) and the samples (compressed JSON). The newest KEEP
+    sessions are kept (for the trend over time); only the newest KEEP_SAMPLES keep their
+    samples, older ones only the summary - so the file stays small."""
+    KEEP = 200
+    KEEP_SAMPLES = 60
 
     def __init__(self, path=None):
         self.path = path or os.path.join(Paths.CFG_DIR, "sessions.db")
@@ -2833,6 +2910,8 @@ class SessionStore:
             sid = cur.lastrowid
             con.execute("DELETE FROM sessions WHERE id NOT IN (SELECT id FROM "
                         "sessions ORDER BY start DESC LIMIT ?)", (self.KEEP,))
+            con.execute("UPDATE sessions SET samples=NULL WHERE samples IS NOT NULL AND id NOT IN "
+                        "(SELECT id FROM sessions ORDER BY start DESC LIMIT ?)", (self.KEEP_SAMPLES,))
             con.commit()
             return sid
         finally:
@@ -2889,6 +2968,15 @@ class SessionStore:
                 continue
         return out
 
+
+    def clear(self):
+        con = self._con()
+        try:
+            con.execute("DELETE FROM sessions")
+            con.commit()
+            con.execute("VACUUM")
+        finally:
+            con.close()
 
     def delete(self, ids):
         con = self._con()
@@ -3077,6 +3165,32 @@ class SessionAnalyzer:
         out.sort(key=lambda a: a["cpu"] * 10 + a["mb"] / 100, reverse=True)
         return out[:12]
 
+    LIMIT_MIN = 30          # samples (1 minute) before saying what limited the frame rate
+
+    @classmethod
+    def limits(cls, c):
+        """Shares of the game time (only moments with a frame rate). None = not measured.
+        gpu_full: GPU at 95 %+; gpu_spare: GPU under 75 %; cpu_busy: CPU at 85 %+ while the GPU
+        had power to spare; power: the driver said "power limit" while the GPU was busy."""
+        n = len(c.get("t", []))
+        fps, gu, cu = c.get("fps", [None] * n), c.get("g_use", [None] * n), c.get("c_use", [None] * n)
+        pl = c.get("g_plim", [None] * n)
+        idx = [i for i in range(n) if fps[i] is not None and gu[i] is not None]
+        out = {"gpu_full": None, "gpu_spare": None, "cpu_busy": None, "power": None, "samples": len(idx)}
+        if len(idx) < cls.LIMIT_MIN:
+            return out
+        full = [i for i in idx if gu[i] >= 95]
+        spare = [i for i in idx if gu[i] < 75]
+        out["gpu_full"] = len(full) / len(idx)
+        out["gpu_spare"] = len(spare) / len(idx)
+        sc = [i for i in spare if cu[i] is not None]
+        if sc:
+            out["cpu_busy"] = sum(1 for i in sc if cu[i] >= 85) / len(sc)
+        busy = [i for i in idx if gu[i] >= 80 and pl[i] is not None]
+        if len(busy) >= cls.LIMIT_MIN // 2:
+            out["power"] = sum(1 for i in busy if pl[i]) / len(busy)
+        return out
+
     @classmethod
     def summarize(cls, c, meta, frames):
         """c: dict of equal-length lists. meta: names/times. frames: dict with
@@ -3118,6 +3232,7 @@ class SessionAnalyzer:
         else:
             add("ok", "Frame-rate drops", "No big frame-rate drops")
         a = cls.avg
+        limit = cls.limits(c)
         count = frames.get("count", 0) or 0
         avg_fps = 1000.0 * count / frames["total_ms"] if frames.get("total_ms") else None
         # 1% / 0.1% lows need enough frames to mean something: at least 10 frames in the slice
@@ -3134,6 +3249,7 @@ class SessionAnalyzer:
             "c_pow": [a(c.get("c_pow", [])), cls.mx(c.get("c_pow", []))],
             "g_pow": [a(c.get("g_pow", [])), cls.mx(c.get("g_pow", []))],
             "plan": meta.get("plan", ""), "driver": meta.get("driver", ""),
+            "windows": meta.get("windows", ""), "limit": limit,
             "c_use": [a(c["c_use"]), cls.mx(c["c_use"])],
             "g_use": [a(c["g_use"]), cls.mx(c["g_use"])],
             "ram": [a(c["ram"]), cls.mx(c["ram"])],
@@ -3162,7 +3278,8 @@ class SessionRecorder:
     MIN_SECONDS = 60
     SCAN_EVERY = 5          # background-app scan every N samples (10 s)
     CHECKPOINT = 15         # save the running session every N samples (30 s)
-    IGNORE = {"chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "opera.exe",
+    IGNORE = {"lmonitor.exe", "python.exe", "pythonw.exe",     # Lmonitor's own window
+              "chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "opera.exe",
               "vivaldi.exe", "vlc.exe", "mpv.exe", "wmplayer.exe", "spotify.exe",
               "discord.exe", "steamwebhelper.exe", "steam.exe", "obs64.exe",
               "teams.exe", "slack.exe", "code.exe", "devenv.exe", "notepad.exe",
@@ -3172,7 +3289,7 @@ class SessionRecorder:
                  "presentmon.exe", "lmonitor.exe", "python.exe", "pythonw.exe",
                  "searchindexer.exe", "msmpeng.exe"}
     KEYS = ("t", "fps", "c_use", "c_temp", "c_clk", "c_pow", "g_use", "g_temp", "g_clk",
-            "g_pow", "vram", "vram_total", "ram", "avail")
+            "g_pow", "vram", "vram_total", "ram", "avail", "g_plim")
 
     def __init__(self, fps, cpu, gpu, store, enabled=lambda: True):
         self.fps, self.cpu, self.gpu, self.store = fps, cpu, gpu, store
@@ -3209,7 +3326,7 @@ class SessionRecorder:
 
     # ---- one cycle
     def step(self, now):
-        if not self.enabled():
+        if not self.enabled() and not self.bench:
             self.cand = None
             if self.cur is not None:
                 self.finish(now)
@@ -3219,8 +3336,38 @@ class SessionRecorder:
         else:
             self._sample(now)
 
+    # ---- benchmark: one minute of the game in front, started on request
+    BENCH_SECS = 60
+    BENCH_START = 3         # s the game must be in front (time to switch back to it)
+    BENCH_WAIT = 600        # s to wait for a game before giving up
+    bench = None            # None / {"state": "waiting" | "running", "asked": t}
+    bench_done = None       # set when one finished: (session id or None, text) - the window takes it
+
+    def start_bench(self, now=None):
+        """The user pressed "Run a benchmark": the next game in front is recorded for a minute."""
+        now = time.time() if now is None else now
+        if self.cur is not None and not self.cur.get("bench"):
+            self.finish(now)                 # the normal session so far is kept
+        self.cur, self.cand = None, None
+        self.bench = {"state": "waiting", "asked": now}
+        return True
+
+    def stop_bench(self):
+        """Cancel: nothing is saved."""
+        if self.cur is not None and self.cur.get("bench"):
+            self.cur = None
+        self.bench = None
+
+    def _bench_end(self, cur, now):
+        cur["bench_left"] = 0
+        sid = self._save(cur, now, live=False, bench=True)
+        self.cur, self.bench = None, None
+        self.bench_done = (sid, "Benchmark finished")
+
     def _look_for_game(self, now):
         cur = self.fps.current()
+        if self.bench and now - self.bench["asked"] > self.BENCH_WAIT:
+            self.bench, self.bench_done = None, (None, "Benchmark cancelled: no game was started")
         if cur is None or cur[1].lower() in self.IGNORE:
             self.cand = None
             return
@@ -3228,7 +3375,8 @@ class SessionRecorder:
         if self.cand is None or self.cand[0] != pid:
             self.cand = (pid, now)
             return
-        if now - self.cand[1] >= self.START_AFTER:
+        wait = self.BENCH_START if self.bench else self.START_AFTER
+        if now - self.cand[1] >= wait:
             base = self.fps.counters(pid)
             if base is None:
                 return
@@ -3237,7 +3385,9 @@ class SessionRecorder:
                         "last": base[:2], "last_frame": now, "n": 0,
                         "c": {k: [] for k in self.KEYS}, "apps": {},
                         "scans": 0, "approx": False, "hist": base[2],
-                        "sid": None, "extra": self._extra()}
+                        "sid": None, "extra": self._extra(), "bench": bool(self.bench)}
+            if self.bench:
+                self.bench["state"] = "running"
 
     def _extra(self):
         try:
@@ -3249,6 +3399,10 @@ class SessionRecorder:
     def _sample(self, now):
         cur, fps = self.cur, self.fps
         if not fps.recent(cur["pid"], self.END_AFTER):
+            if cur.get("bench"):             # the game closed before the minute was over
+                self.cur, self.bench = None, None
+                self.bench_done = (None, "Benchmark stopped: the game was closed before the minute was over")
+                return
             self.finish(cur["last_frame"])
             return
         c = cur["c"]
@@ -3277,12 +3431,17 @@ class SessionRecorder:
                "c_clk": cc, "c_pow": cp, "g_use": gu, "g_temp": gt, "g_clk": gk, "g_pow": gp,
                "vram": mem[0] if mem else None,
                "vram_total": mem[1] if mem else None,
-               "ram": vm.percent, "avail": vm.available / 1024 ** 3}
+               "ram": vm.percent, "avail": vm.available / 1024 ** 3,
+               "g_plim": getattr(self.gpu, "power_limit", None)}
         for k in self.KEYS:
             c[k].append(row[k])
         cur["n"] += 1
         if cur["n"] % self.SCAN_EVERY == 1 and not self.safe:
             self._scan_apps(cur)
+        if cur.get("bench"):
+            if now - cur["start"] >= self.BENCH_SECS:
+                self._bench_end(cur, now)
+            return
         if cur["n"] % self.CHECKPOINT == 0 and now - cur["start"] >= self.MIN_SECONDS:
             self._save(cur, now, live=True)   # visible in the list while playing
 
@@ -3325,7 +3484,7 @@ class SessionRecorder:
             return None
         return self._save(cur, end, live=False)
 
-    def _save(self, cur, end, live):
+    def _save(self, cur, end, live, bench=False):
         """Write the session so far (a new row, then updates of that row).
         Uses the counters kept at the last sample: PresentMon may already have
         forgotten the program when the game has just closed."""
@@ -3341,6 +3500,7 @@ class SessionRecorder:
         meta.update(cur.get("extra") or {})
         summary = SessionAnalyzer.summarize(cur["c"], meta, frames)
         summary["live"] = live
+        summary["benchmark"] = bool(bench)
         try:
             if cur["sid"] is None:
                 cur["sid"] = self.store.save(summary, cur["c"])
@@ -3361,6 +3521,11 @@ class SessionRecorder:
     def status(self):
         """-> (text, recording?)"""
         cur = self.cur
+        if self.bench:
+            if cur is not None and cur.get("bench"):
+                left = max(0, int(self.BENCH_SECS - (time.time() - cur["start"])))
+                return f"Benchmark running: {cur['name']} - {left} s left", True
+            return "Benchmark: switch to your game - it starts by itself", False
         if not self.enabled():
             return "Session recording is off", False
         if cur is not None:
@@ -3619,6 +3784,21 @@ class Alerts:
         return out
 
 
+def windows_build():
+    """'26100.2314' (build.update) - to notice a Windows update between two sessions."""
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows NT\CurrentVersion") as k:
+            build = str(winreg.QueryValueEx(k, "CurrentBuild")[0])
+            try:
+                ubr = winreg.QueryValueEx(k, "UBR")[0]
+            except OSError:
+                ubr = None
+        return build + ("." + str(ubr) if ubr is not None else "")
+    except Exception:
+        return ""
+
+
 class SessionReport:
     """What the Sessions page shows for one game: the important numbers first, in plain
     words what was noticed, and a comparison of two sessions. Only measured values;
@@ -3676,24 +3856,73 @@ class SessionReport:
                         "tip": "Close what you do not need before playing: " + names + ".",
                         "more": "Listed: average over %.0f %% of the CPU or over %d MB of memory."
                                 % (SessionAnalyzer.HEAVY_CPU, SessionAnalyzer.HEAVY_MB)})
+        lim = s.get("limit") or {}
+        if (lim.get("power") or 0) >= 0.3:
+            out.append({"sev": "notice",
+                        "text": "Your graphics card's performance may have been limited by its power settings.",
+                        "tip": "On a laptop: plug it in and choose a performance mode. On a desktop this is "
+                               "how the card is set up, and it is normal.",
+                        "more": "The graphics driver reported its power limit for %.0f %% of the time the card was busy."
+                                % (lim["power"] * 100)})
+        if (lim.get("gpu_full") or 0) >= 0.6:
+            out.append({"sev": "info",
+                        "text": "Your graphics card set the frame rate: it worked at full power most of the time.",
+                        "tip": "That is normal in demanding games. Lower graphics settings or resolution give more FPS.",
+                        "more": "Graphics card at 95 %% or more for %.0f %% of the game." % (lim["gpu_full"] * 100)})
+        elif (lim.get("gpu_spare") or 0) >= 0.5:
+            cpu = (lim.get("cpu_busy") or 0) >= 0.5
+            out.append({"sev": "info",
+                        "text": "Your graphics card often had power to spare, so something else set the frame rate.",
+                        "tip": ("The processor was very busy at the same time, so it is probably the limit. "
+                                if cpu else "") + "Other possible reasons: an FPS limit or V-Sync, or the game itself.",
+                        "more": "Graphics card under 75 %% for %.0f %% of the game%s." % (
+                            lim["gpu_spare"] * 100,
+                            "; processor at 85 %% or more in %.0f %% of those moments" % (lim["cpu_busy"] * 100)
+                            if lim.get("cpu_busy") is not None else "")})
         drops = s.get("drops") or []
         if drops:
             worst = min(drops, key=lambda e: e["low"] / e["before"])
             out.append({"sev": "notice", "text": "The frame rate dropped sharply %d time(s)." % len(drops),
                         "tip": "",
                         "more": "Worst: %.0f -> %.0f FPS. %s" % (worst["before"], worst["low"], worst["cause"])})
-        out.sort(key=lambda x: x["sev"] != "warn")
+        out.sort(key=lambda x: {"warn": 0, "notice": 1}.get(x["sev"], 2))
         return out
 
     @staticmethod
     def verdict(s, noticed):
         if s.get("avg_fps") is None:
             return "The frame rate was not measured for this game, so only temperatures and load are shown."
-        if not noticed:
+        if not [n for n in noticed if n["sev"] in ("warn", "notice")]:
             return "A smooth session: nothing slowed the game down."
         if any(n["sev"] == "warn" for n in noticed):
             return "Something slowed the game down - see below."
         return "Mostly fine, with a few things worth knowing."
+
+    # ---- the same game over time
+    @classmethod
+    def trend(cls, s, earlier):
+        """This session against the usual of earlier sessions of the same game (median of up
+        to 5). -> [{label, text, better}] - empty with fewer than 2 earlier sessions."""
+        earlier = [e for e in earlier if bool(e.get("benchmark")) == bool(s.get("benchmark"))][-5:]
+        if len(earlier) < 2:
+            return []
+        med = lambda xs: sorted(xs)[len(xs) // 2] if xs else None
+        out = []
+        for label, get, same, unit, higher_better, pct in (
+                ("Average FPS", lambda x: x.get("avg_fps"), cls.SAME_FPS, "", True, True),
+                ("GPU hottest", lambda x: cls._m(x.get("g_temp"), 1), cls.SAME_TEMP, "°C", False, False),
+                ("CPU hottest", lambda x: cls._m(x.get("c_temp"), 1), cls.SAME_TEMP, "°C", False, False)):
+            now, usual = get(s), med([v for v in map(get, earlier) if v is not None])
+            if now is None or usual is None or (pct and usual <= 0):
+                continue
+            d = (now - usual) / usual * 100 if pct else now - usual
+            if abs(d) < same:
+                out.append({"label": label, "text": "about the same as usual", "better": None})
+            else:
+                out.append({"label": label, "better": (d > 0) == higher_better,
+                            "text": "%.0f %s %s than usual" % (abs(d), "%" if pct else unit,
+                                                             "higher" if d > 0 else "lower")})
+        return out
 
     # ---- two sessions side by side
     MIN_COMPARE_SECS = 120          # shorter sessions vary too much to compare
@@ -3710,7 +3939,11 @@ class SessionReport:
             res["note"] = ("These are two different games, so the numbers cannot be compared fairly. "
                            "Pick two sessions of the same game.")
             return res
-        if min(a.get("duration") or 0, b.get("duration") or 0) < cls.MIN_COMPARE_SECS:
+        if bool(a.get("benchmark")) != bool(b.get("benchmark")):
+            res["note"] = "A benchmark and a normal session are not compared: pick two benchmarks or two sessions."
+            return res
+        need = 50 if a.get("benchmark") else cls.MIN_COMPARE_SECS
+        if min(a.get("duration") or 0, b.get("duration") or 0) < need:
             res["note"] = "One of the sessions is shorter than 2 minutes - too short for a fair comparison."
             return res
         m, rows = cls._m, []
@@ -3743,6 +3976,8 @@ class SessionReport:
             ch.append("Graphics driver: %s -> %s" % (a["driver"], b["driver"]))
         if a.get("plan") and b.get("plan") and a["plan"] != b["plan"]:
             ch.append("Power plan: %s -> %s" % (a["plan"], b["plan"]))
+        if a.get("windows") and b.get("windows") and a["windows"] != b["windows"]:
+            ch.append("Windows update: build %s -> %s" % (a["windows"], b["windows"]))
         end_a = a["start"] + (a.get("duration") or 0)
         for c in changes:
             if end_a <= c.get("t", 0) <= b["start"] and c.get("status") in ("applied", "reverted") and c.get("title"):
@@ -5444,7 +5679,30 @@ td,th{{text-align:left;padding:6px 8px;border-bottom:1px solid rgba(128,128,128,
         if sc["unknown"]:
             parts.append('<p class="dim">Not counted (no answer from Windows): '
                          + e(", ".join(u["title"] for u in sc["unknown"])) + "</p>")
-        parts.append("</div><h2>Issues</h2>")
+        parts.append("</div>")
+        sy = rep.get("system")
+        if sy:
+            parts.append("<h2>This PC</h2><div class=\"card\"><table>")
+            for k, v in (("Processor", sy.get("cpu")), ("Graphics card", sy.get("gpu")),
+                         ("Graphics driver", sy.get("gpu_driver")),
+                         ("Memory (RAM)", "%s GB" % sy["ram_gb"] if sy.get("ram_gb") else None),
+                         ("Graphics memory", "%s GB" % sy["vram_gb"] if sy.get("vram_gb") else None),
+                         ("Windows", sy.get("windows")),
+                         ("Lmonitor runs as administrator", "yes" if sy.get("admin") else "no (CPU sensors need it)")):
+                parts.append(f"<tr><td>{e(k)}</td><td>{e(v or 'not known')}</td></tr>")
+            parts.append("</table></div><h2>Sensors</h2><div class=\"card\"><table>")
+            for k, v in (sy.get("sensors") or {}).items():
+                c = "ok" if v == "available" else "warn"
+                parts.append(f'<tr><td>{e(k)}</td><td class="{c}">{e(v)}</td></tr>')
+            parts.append('</table><div class="dim">"Not available" values are never shown as zero '
+                         'anywhere in Lmonitor.</div></div><h2>Lmonitor\'s own errors</h2><div class="card">')
+            if sy.get("errors"):
+                parts.append(f'<div>{e(sy["error_count"])} logged (newest last):</div><ul>'
+                             + "".join(f"<li>{e(x)}</li>" for x in sy["errors"]) + "</ul>")
+            else:
+                parts.append('<div class="ok">None logged.</div>')
+            parts.append("</div>")
+        parts.append("<h2>Issues</h2>")
         if not rep["issues"]:
             parts.append(f'<div class="card ok">No warnings or notices ({rep["ok_count"]} checks OK).</div>')
         for i in rep["issues"]:
@@ -5505,6 +5763,7 @@ class Reports:
 
     def __init__(self, scans, sessions, log):
         self.scans, self.sessions, self.log = scans, sessions, log
+        self.system = lambda: None          # the backend gives "This PC" (hardware, sensors)
         self.report = None
         self.busy, self.version, self.last = False, 0, None
 
@@ -5535,6 +5794,11 @@ class Reports:
     def build(self):
         self.report = ReportBuilder.build(self.scans.load(), self.sessions.list(),
                                           self.log.load(), AppInfo.VERSION)
+        try:
+            self.report["system"] = self.system()
+        except Exception:
+            Logger.error("report system")
+            self.report["system"] = None
         self.version += 1
         return self.report
 

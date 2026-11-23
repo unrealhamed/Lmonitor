@@ -214,7 +214,7 @@ miss = [k for k in need if ('"%s":' % k) not in fa]
 chk("Persian texts %s" % (miss or ""), not miss)
 chk("1.20.1: empty Sessions says when recording is off, with a button", "Turn on recording" in sess
     and "tools.sessionsOn(true)" in sess and '"Turn on recording":' in fa and "visible: !!page.rep.ft" in sess)
-wn = E.WhatsNew.pending("1.19.1", E.AppInfo.VERSION)
+wn = E.WhatsNew.pending("1.19.1", "1.20.0")
 chk("What's new for 1.20.0", wn and wn["version"] == "1.20.0" and len(wn["slides"]) >= 3)
 chk("version 1.20.0 or newer", tuple(map(int, E.AppInfo.VERSION.split("."))) >= (1, 20, 0))
 print("\n%d passed, %d failed" % (ok, bad))

@@ -326,6 +326,17 @@ class Tools(QObject):
         Tools._sess_gen += 1
         self._bump("sessions")
 
+    @Slot()
+    def benchStart(self):
+        self._b.sessions.start_bench()
+        self._b.ensure_fps(False)                # PresentMon must run for the frame rate
+        self._bump("sessions")
+
+    @Slot()
+    def benchStop(self):
+        self._b.sessions.stop_bench()
+        self._bump("sessions")
+
     @Slot(bool)
     def sessionsOn(self, on):
         self._b.set_setting("sessions_on", bool(on))

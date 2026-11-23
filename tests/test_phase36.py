@@ -58,11 +58,13 @@ try:
     nu.rows, nu.newest, nu.loaded = [(hr, "game.exe", 50 * MB, 0)], base - 3600, now
     hours, progs = nu.day(nu.day_start(base))
     live = [p for p in progs if p["name"] == E.NetUsage.LIVE]
+    # just after midnight the slot of 10 minutes ago belongs to yesterday: then only today's part counts
+    midnight = nu.day_start(base - 600) != nu.day_start(base)
     chk("after Windows' newest record: Lmonitor's count shows as its own row",
-        live and live[0]["down"] == 5 * MB and live[0]["up"] == 1 * MB)
+        live and ((live[0]["down"] == 5 * MB and live[0]["up"] == 1 * MB) or (midnight and live[0]["down"] == 2 * MB)))
     chk("before it: only Windows' records (nothing counted twice)",
         sum(p["down"] for p in progs) == 55 * MB or nu.day_start(base - 7200) != nu.day_start(base))
-    chk("day totals include it", nu.days(1)[0]["down"] >= 5 * MB)
+    chk("day totals include it", nu.days(1)[0]["down"] >= (2 if midnight else 5) * MB)
 finally:
     shutil.rmtree(d, ignore_errors=True)
 

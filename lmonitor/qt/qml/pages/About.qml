@@ -62,6 +62,7 @@ Item {
     Card {                                  // ---- privacy: what Lmonitor keeps and sends
         id: priv
         property bool open: false
+        property bool cleared: false
         y: infoCard.y + infoCard.height + Tokens.gap
         width: Math.min(parent.width, 720); height: pCol.height + 36
         Column {
@@ -89,7 +90,13 @@ Item {
                     Text { width: pCol.width; wrapMode: Text.WordWrap; text: "•  " + Tr.t(modelData); color: Tokens.sub
                            font.family: Tokens.font; font.pixelSize: Tokens.fsSmall; lineHeight: 1.15 }
                 }
-                Pill { label: Tr.t("Open the data folder"); onClicked: backend.openDataFolder() }
+                Row { spacing: 10
+                    Pill { label: Tr.t("Open the data folder"); onClicked: backend.openDataFolder() }
+                    ConfirmButton { danger: true; label: Tr.t("Delete my history")
+                                    question: Tr.t("Delete game sessions, PC check results and network counts?")
+                                    onConfirmed: { backend.clearHistory(); priv.cleared = true } } }
+                Text { visible: priv.cleared; text: Tr.t("Deleted. Your settings were kept."); color: Tokens.accent
+                       font.family: Tokens.font; font.pixelSize: Tokens.fsSmall }
             }
         }
     }

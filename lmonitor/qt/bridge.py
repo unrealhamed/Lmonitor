@@ -48,6 +48,8 @@ class Bridge(QObject):
     alertsChanged = Signal()
     _alerts_new = Signal(list)         # worker thread -> UI thread
     _game_switched = Signal()          # a game started / ended: its own overlay settings
+    _bench_finished = Signal(str)      # worker thread -> UI thread
+    trayInfo = Signal(str, str)        # a calm message next to the clock (title, text)
 
     HUD_EMPTY = {"items": [], "accent": "#35d6ff", "window": 60}
     FALLBACK_FONTS = ("Consolas", "Cascadia Mono", "Courier New")
@@ -81,6 +83,7 @@ class Bridge(QObject):
         self._hud_sampled.connect(self._on_hud)
         self._alerts_new.connect(self._on_alerts)
         self._game_switched.connect(self.settingsTouched)
+        self._bench_finished.connect(self._on_bench)
         self._nu = {"days": 1, "day": None, "hour": -1, "seen": -1}
         self._nu_view = {"state": "idle"}
         self._nu_timer = QTimer(self)
@@ -148,12 +151,19 @@ class Bridge(QObject):
 
     def _autostart_job(self, on):
         """Ask (on = None) or switch the Windows task on a worker thread."""
+        st = self._b.settings
+        wanted = st["autostart_on"]
+
         def work():
             err = ""
             try:
                 if on is not None:
                     err = Autostart.set(bool(on))
-                state = Autostart.is_on()
+                    state = Autostart.is_on()
+                elif wanted:                          # chosen before: make sure the task is there
+                    state, err = Autostart.repair(True)
+                else:
+                    state = Autostart.is_on()
             except Exception as e:
                 state, err = bool(self._autostart), str(e)[:200]
             self._autostart_done.emit(state, err)
@@ -161,11 +171,17 @@ class Bridge(QObject):
 
     def _on_autostart(self, state, err):
         self._autostart, self._autostart_err = state, err
+        st = self._b.settings
+        if st["autostart_on"] is None and state:      # 1.20.1 and older: the task tells the choice
+            st["autostart_on"] = True
+            self._save.start()
         self.autostartChanged.emit()
 
     @Slot(bool)
     def setAutostart(self, on):
         self._autostart = bool(on)                    # the switch moves at once
+        self._b.settings["autostart_on"] = bool(on)   # remembered: a lost task is made again
+        self._save.start()
         self.autostartChanged.emit()
         self._autostart_job(bool(on))
 
@@ -271,8 +287,11 @@ class Bridge(QObject):
                     b.ensure_fps(fps_in_bar or (hud and b.hud_wants_fps()))
                     if b.game_tick():                   # a game started / ended
                         self._game_switched.emit()
-                    if b.settings["sessions_on"]:
+                    if b.settings["sessions_on"] or b.sessions.bench:
                         b.sessions.tick()
+                    if b.sessions.bench_done:           # a benchmark ended: say so next to the clock
+                        done, b.sessions.bench_done = b.sessions.bench_done, None
+                        self._bench_finished.emit(done[1])
                 if wanted:
                     texts = b.overlay_read()
                     self._last_texts = texts
@@ -675,6 +694,24 @@ class Bridge(QObject):
         self._b.set_setting("alerts_on", bool(on))
         self.settingsTouched()
         self.alertsChanged.emit()
+
+    def _on_bench(self, text):
+        fa = self._b.settings["language"] == "fa"
+        msgs = {"Benchmark finished": ("بنچمارک تمام شد", "نتیجه را در «جلسه‌ها» ببین."),
+                "Benchmark cancelled: no game was started": ("بنچمارک لغو شد", "هیچ بازی‌ای اجرا نشد."),
+                "Benchmark stopped: the game was closed before the minute was over":
+                    ("بنچمارک متوقف شد", "بازی قبل از تمام شدن یک دقیقه بسته شد.")}
+        en = {"Benchmark finished": ("Benchmark finished", "Open Sessions to see the result.")}
+        title, body = (msgs.get(text) if fa else en.get(text)) or (text, "")
+        self.trayInfo.emit(title, body)
+        self.tools._bump("sessions")
+
+    @Slot()
+    def clearHistory(self):
+        self._b.clear_history()
+        self.tools._bump("sessions")
+        self.tools._bump("reports")
+        self.dashboardChanged.emit()
 
     @Slot()
     def openDataFolder(self):
