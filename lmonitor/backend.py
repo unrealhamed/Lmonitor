@@ -18,7 +18,7 @@ from lmonitor.engine import (AppInfo, BackgroundReader, CardStatus, ChangeLog, C
                              Logger, MemoryReader, ReportBuilder,
                              ScanStore, SessionAnalyzer, Settings, Telemetry,
                              Theme, WinApi, GameSettings, fmt_net, Profiles, NetUsage, NetMeter, WhatsNew,
-                             Alerts, SessionReport, windows_build, Paths)
+                             Alerts, SessionReport, windows_build, Paths, Baseline, Insights)
 
 HW_TABS = (("CPU / GPU", "rows_processor"), ("Memory", "rows_memory"),
            ("Storage", "rows_storage"), ("Network", "rows_network"),
@@ -56,6 +56,8 @@ class Backend:
                                         lambda: self.settings["sessions_on"])
         self.sessions.extra = self.session_extra
         self.alerts = Alerts()
+        self.baseline = Baseline()
+        self._ins, self._ins_t, self._base_t = None, 0.0, 0.0
         self.game, self._game_cand = None, None     # (pid, name) of the game that runs now
         self._sys_cache, self._sys_t, self._fps_try = {}, 0.0, 0.0
         # graph overlay: its own short history (5 min at most, 4 readings/s in real time)
@@ -99,9 +101,16 @@ class Backend:
     def sample(self):
         """One telemetry reading (call from a worker thread, never the UI)."""
         snap = self.telemetry.sample()
+        game_fps = self._game_fps()
+        # Reading the CPU sensors makes the sensor library visit every CPU core, which a game
+        # can feel; while a game runs it is done every 2 s instead of every second.
+        try:
+            self.cpu._bg.period = CpuReader.GAME_PERIOD if game_fps is not None else 1.0
+        except Exception:
+            pass
         if self.settings["alerts_on"]:
             try:
-                self.alerts.check(snap, self._game_fps(), thermal=self.gpu.thermal)
+                self.alerts.check(snap, game_fps, thermal=self.gpu.thermal)
             except Exception:
                 Logger.error("alerts")
         # the real-time charts read the graph-overlay history: while nothing fast runs (another
@@ -126,17 +135,106 @@ class Backend:
         except Exception:
             return None
 
+    def game_name(self, exe):
+        """Your own name for the program if you gave it one (Sessions), else
+        'FortniteClient-Win64-Shipping.exe' -> 'FortniteClient-Win64-Shipping'"""
+        exe = exe or ""
+        own = self.settings["game_names"].get(exe.lower())
+        if own:
+            return own
+        return exe[:-4] if exe.lower().endswith(".exe") else exe
+
     @staticmethod
-    def game_name(exe):
-        """'FortniteClient-Win64-Shipping.exe' -> 'FortniteClient-Win64-Shipping'"""
+    def file_name(exe):
         exe = exe or ""
         return exe[:-4] if exe.lower().endswith(".exe") else exe
+
+    def name_program(self, exe, name):
+        """Name a program for good: every session of it, now and later, shows this name."""
+        exe = (exe or "").lower()
+        if not exe:
+            return False
+        name = " ".join(str(name or "").split())[:60]
+        names = dict(self.settings["game_names"])
+        if name and name.lower() != self.file_name(exe).lower():
+            names[exe] = name
+        else:
+            names.pop(exe, None)                 # empty = the program's own name again
+        self.settings["game_names"] = names
+        self._last_sess_t = 0.0                  # Home shows the new name at once
+        return True
+
+    # ---- Home: the few most important things (see engine.Insights / Baseline)
+    INSIGHTS_EVERY = 60.0
+
+    def _baseline_now(self):
+        inf = self.telemetry.info
+        mem = (self.telemetry.snap or {}).get("g_mem")
+        return {"driver": inf.nvidia_driver or (inf.gpu_drivers[0][1] if inf.gpu_drivers else ""),
+                "windows": windows_build(), "cpu": self.host.cpu_name_raw or inf.cpu_registry or "",
+                "gpu": self.gpu.display_name() or "", "ram_gb": round(psutil.virtual_memory().total / 1024 ** 3)}
+
+    def insights(self, now=None):
+        """Status lines + insights for Home. Rebuilt at most once a minute (it reads the
+        session file), and the PC's baseline is compared once an hour."""
+        now = time.monotonic() if now is None else now
+        if self._ins is not None and now - self._ins_t < self.INSIGHTS_EVERY:
+            return self._ins
+        self._ins_t = now
+        try:
+            if now - self._base_t > 3600 or not self._base_t:
+                vals = self._baseline_now()
+                if vals["driver"] or vals["cpu"]:          # system info is read by then
+                    self._base_t = now
+                    self.baseline.update(vals)
+            rows = sorted(self.session_store.list(), key=lambda x: x["start"])
+            sums = []
+            for r in rows:
+                sm = dict(r["summary"])
+                sm["display"] = self.game_name(r["game"])
+                sums.append(sm)
+            items = Insights.build(sums, self.baseline.changes(), list(self.alerts.recent),
+                                   self.scanner.issues)
+        except Exception:
+            Logger.error("insights")
+            items = []
+        self._ins = {"items": items, "status": self._status_rows()}
+        return self._ins
+
+    def _status_rows(self):
+        """Four short lines: temperatures, PC check, stability, graphics driver."""
+        snap = self.telemetry.snap or {}
+        temps = [t for t in (snap.get("c_temp"), snap.get("g_temp")) if t is not None]
+        hot = any(t >= 90 for t in temps)
+        warm = any(t >= 80 for t in temps)
+        rows = [{"t": "Temperatures", "v": "Not measured" if not temps else ("Hot" if hot else "Warm" if warm else "Normal"),
+                 "sev": "none" if not temps else ("warn" if hot else "notice" if warm else "ok")}]
+        sc = ReportBuilder.score(self.scanner.issues)
+        rows.append({"t": "PC check", "v": ("%d / 100" % sc["value"]) if sc["value"] is not None else "Not scanned yet",
+                     "sev": "none" if sc["value"] is None else ("ok" if sc["value"] >= 80 else "notice" if sc["value"] >= 60 else "warn"),
+                     "link": "PC check"})
+        ev = {i.get("id"): i for i in self.scanner.issues}
+        if not self.scanner.issues:
+            st = {"v": "Not checked yet", "sev": "none"}
+        elif "ev_kernel41" in ev or "ev_bugcheck" in ev:
+            st = {"v": "Unexpected restarts", "sev": "warn"}
+        else:
+            st = {"v": "No recent crashes", "sev": "ok"}
+        rows.append(dict(st, t="Stability", link="PC check"))
+        inf = self.telemetry.info
+        drv = inf.nvidia_driver or (inf.gpu_drivers[0][1] if inf.gpu_drivers else "")
+        new = [c for c in self.baseline.changes(time.time() - 14 * 86400) if c["key"] == "driver"]
+        rows.append({"t": "Graphics driver", "v": (("New: " if new else "") + drv) if drv else "Not known",
+                     "sev": "info" if new else ("ok" if drv else "none")})
+        return rows
 
     def session_extra(self):
         """Saved with every session, to explain a difference later: power plan, graphics driver."""
         inf = self.telemetry.info
         drv = inf.nvidia_driver or (inf.gpu_drivers[0][1] if inf.gpu_drivers else "")
-        return {"plan": self._plan or "", "driver": drv or "", "windows": windows_build()}
+        st = self.settings
+        return {"plan": self._plan or "", "driver": drv or "", "windows": windows_build(),
+                "overlay": bool(st["on"] or st["hud_on"] or st["hud2_on"])}
 
     # ---- every game keeps its own overlay settings (see Settings.begin_game)
     GAME_AFTER = 6.0            # s a program must draw frames in front before it counts as a game
@@ -262,6 +360,7 @@ class Backend:
                         "adapter": main[0] if main else "", "link": main[1] if main else 0,
                         "since_boot": fmt_size(rx + tx) if rx is not None else ""},
             "pc_info": self.pc_info(sc),
+            "insights": self.insights(),
             "status": {"score": sc["value"], "covered": sc["covered"],
                        "total": sc["total"],
                        "cpu_sensor": t is not None, "gpu_sensor": gt is not None,
@@ -314,7 +413,7 @@ class Backend:
             if self.fps.alive:
                 cur, snap = self.fps.current(), self.fps.snapshot(False)
                 if cur and snap:
-                    game = {"name": cur[1], "fps": round(snap[0]), "avg": round(snap[1]),
+                    game = {"name": self.game_name(cur[1]), "fps": round(snap[0]), "avg": round(snap[1]),
                             "low": round(snap[2]) if snap[2] else None}
         except Exception:
             Logger.error("now box fps")
@@ -330,7 +429,7 @@ class Backend:
             try:
                 for it in self.session_store.list():
                     if not it["summary"].get("live"):
-                        self._last_sess = {"game": it["game"], "when": self._when(it["start"]),
+                        self._last_sess = {"game": self.game_name(it["game"]), "when": self._when(it["start"]),
                                            "avg_fps": it["summary"].get("avg_fps")}
                         break
             except Exception:
@@ -344,7 +443,7 @@ class Backend:
         if self.safe_active:
             return "Paused by anti-cheat safe mode"
         if not WinApi.is_admin():
-            return "Run as administrator for CPU temperature"
+            return "Needs admin for temperature"
         hint = self.telemetry._cpu_hint(None) or ""
         return hint.replace("n/a", "").strip(" ()") or "CPU sensor not available"
 
@@ -764,14 +863,57 @@ class Backend:
         items = []
         for s in self.session_store.list():
             sm = s["summary"]
-            items.append({"id": s["id"], "game": self.game_name(s["game"]), "when": self._when(s["start"]),
+            items.append({"id": s["id"], "game": self.game_name(s["game"]),
+                          "when": self._when(s["start"]),
                           "duration": SessionView.clock(s["duration"]),
                           "avg_fps": sm.get("avg_fps"), "low1": sm.get("low1"),
                           "live": bool(sm.get("live")), "bench": bool(sm.get("benchmark"))})
         bench = self.sessions.bench
         return {"status": status, "recording": rec, "enabled": bool(self.settings["sessions_on"]),
                 "bench": bench["state"] if bench else "",
-                "items": items}
+                "items": items, "groups": self.session_groups()}
+
+    @staticmethod
+    def total_time(secs):
+        secs = int(secs or 0)
+        h, m = secs // 3600, secs % 3600 // 60
+        return ("%d h %d min" % (h, m)) if h else ("%d min" % max(1, m) if secs >= 60 else "%d s" % secs)
+
+    def session_groups(self):
+        """One entry per program (never two programs in one entry), newest played first, each
+        with its launches (sessions) and how its latest launch compares with its usual."""
+        groups, order = {}, []
+        rows = sorted(self.session_store.list(), key=lambda x: x["start"])
+        for s in rows:
+            key = (s["game"] or "").lower()
+            g = groups.get(key)
+            if g is None:
+                g = groups[key] = {"exe": s["game"], "name": self.game_name(s["game"]), "sessions": [],
+                                   "total": 0.0, "last_start": 0.0, "summaries": []}
+                order.append(key)
+            sm = s["summary"]
+            g["sessions"].append({"id": s["id"], "when": self._when(s["start"]),
+                                  "duration": SessionView.clock(s["duration"]),
+                                  "avg_fps": sm.get("avg_fps"), "low1": sm.get("low1"),
+                                  "live": bool(sm.get("live")), "bench": bool(sm.get("benchmark"))})
+            g["total"] += s["duration"] or 0
+            g["last_start"] = max(g["last_start"], s["start"])
+            g["summaries"].append(sm)
+        out = []
+        for key in order:
+            g = groups[key]
+            done = [x for x in g["summaries"] if not x.get("live")]
+            status = ""
+            if done:
+                fp = [t for t in SessionReport.trend(done[-1], done[:-1]) if t["label"] == "Average FPS"]
+                if fp:
+                    status = {None: "as usual", True: "faster than usual", False: "slower than usual"}[fp[0]["better"]]
+            out.append({"exe": g["exe"], "name": g["name"], "count": len(g["sessions"]),
+                        "total": self.total_time(g["total"]), "last": self._when(g["last_start"]),
+                        "status": status, "live": any(x["live"] for x in g["sessions"]),
+                        "sessions": list(reversed(g["sessions"])), "t": g["last_start"]})
+        out.sort(key=lambda x: -x["t"])
+        return out
 
     def _summary(self, sid):
         return next((x["summary"] for x in self.session_store.list() if x["id"] == sid), None)
@@ -789,8 +931,12 @@ class Backend:
                          else "%.0f" % v)
         earlier = [x["summary"] for x in sorted(self.session_store.list(), key=lambda x: x["start"])
                    if x["game"] == sm["game"] and x["start"] < sm["start"] and not x["summary"].get("live")]
+        own = self.settings["game_names"].get((sm["game"] or "").lower(), "")
         return {"id": sid, "game": self.game_name(sm["game"]), "exe": sm["game"],
+                "title": own, "game_name": self.file_name(sm["game"]),
                 "bench": bool(sm.get("benchmark")), "trend": SessionReport.trend(sm, earlier),
+                "whatif": SessionReport.what_if(sm),
+                "whatif": SessionReport.what_if(sm),
                 "when": self._when(sm["start"]), "live": bool(sm.get("live")),
                 "verdict": SessionReport.verdict(sm, noticed), "noticed": noticed, "tiles": tiles,
                 "ft": [None if v is None else round(v, 1) for v in (sm.get("ft") or [None] * 3)],

@@ -1,12 +1,15 @@
 # Screenshots
 
-Real screenshots of Lmonitor v1.19.1, taken on the author's laptop with administrator rights.
+Real screenshots of Lmonitor v1.22.0 (sample game sessions), taken on the author's laptop with administrator rights.
 The Windows user name and PC name are replaced by "Player" / "GAMING-PC".
 
 | File | What it shows |
 |---|---|
 | `dashboard.png` | Home page (dark) |
 | `dashboard-light.png` | Home page (light) |
+| `sessions.png` | Sessions: games grouped, a session report |
+| `overlay-bar.png` | the overlay bar itself |
+| `setup-welcome.png` / `setup-options.png` | the installer |
 | `graphs.png` | Graphs page (real time) |
 | `overlay-settings.png` | Overlay page with the live preview |
 | `graph-overlay.png` | Graph overlay page |

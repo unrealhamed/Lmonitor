@@ -18,10 +18,10 @@ Item {
                    font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: true }
             Text { width: parent.width; wrapMode: Text.WordWrap; color: Tokens.sub
                    font.family: Tokens.font; font.pixelSize: 14; lineHeight: 1.25
-                   text: Tr.t("Lmonitor is a overly and system monitor for windows. It shows FPS, CPU, RAM, and net reading on top of your programs, and keep a record of your program sessions.") }
+                   text: Tr.t("Lmonitor is an overlay and system monitor for Windows. It shows FPS, CPU, GPU, RAM and network readings on top of your games, and keeps a record of your game sessions.") }
             Text { width: parent.width; wrapMode: Text.WordWrap; color: Tokens.sub
                    font.family: Tokens.font; font.pixelSize: 14; lineHeight: 1.25
-                   text: Tr.t("Made by a Claude and new developer named unrealhamed.") }
+                   text: Tr.t("Made by unrealhamed, a new developer, together with Claude.") }
             Text { textFormat: Text.RichText; color: Tokens.sub
                    font.family: Tokens.font; font.pixelSize: 14
                    text: "GitHub: <a href=\"https://github.com/unrealhamed/Lmonitor\" style=\"color:" + Tokens.accent + "\">github.com/unrealhamed/Lmonitor</a>"
@@ -53,7 +53,7 @@ Item {
                     Text { width: parent.width; wrapMode: Text.WordWrap; text: backend.update.notes || ""; color: Tokens.sub
                            font.family: Tokens.font; font.pixelSize: Tokens.fsSmall; lineHeight: 1.2 }
                     Text { width: parent.width; wrapMode: Text.WordWrap; color: Tokens.dim
-                           font.family: Tokens.font; font.pixelSize: 11
+                           font.family: Tokens.font; font.pixelSize: 12
                            text: Tr.t("The installer is checked (size and SHA-256) before it runs. If anything fails, your current version stays as it is.") } }
             }
         }

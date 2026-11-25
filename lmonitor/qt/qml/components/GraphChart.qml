@@ -51,14 +51,14 @@ Item {
         model: [1, 0.5, 0]
         Text { x: 0; y: root.height * index / 2 - 7; width: root.leftGap - 6
                text: root.label(root.maxValue, modelData, root.unit, root.fmtKind); color: Tokens.dim
-               font.family: Tokens.font; font.pixelSize: 10 }
+               font.family: Tokens.font; font.pixelSize: 11 }
     }
     Repeater {
         model: root.rightMax > 0 ? [1, 0.5, 0] : []
         Text { x: root.width - 52; y: root.height * index / 2 - 7; width: 52
                horizontalAlignment: Text.AlignRight
                text: root.label(root.rightMax, modelData, "", root.rightKind); color: Tokens.dim
-               font.family: Tokens.font; font.pixelSize: 10 }
+               font.family: Tokens.font; font.pixelSize: 11 }
     }
     Repeater {
         model: 3

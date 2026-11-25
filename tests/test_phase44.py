@@ -158,7 +158,7 @@ need = ("Run a benchmark", "Cancel benchmark", "Compared with your earlier sessi
         "Your graphics card set the frame rate: it worked at full power most of the time.", "What limited your FPS")
 miss = [k for k in need if ('"%s":' % k) not in fa]
 chk("Persian texts %s" % (miss or ""), not miss)
-wn = E.WhatsNew.pending("1.20.2", E.AppInfo.VERSION)
+wn = E.WhatsNew.pending("1.20.2", "1.21.0")
 chk("What's new 1.21.0", wn and wn["version"] == "1.21.0" and len(wn["slides"]) == 4)
 chk("version 1.21.0 or newer", tuple(map(int, E.AppInfo.VERSION.split("."))) >= (1, 21, 0))
 print("\n%d passed, %d failed" % (ok, bad))

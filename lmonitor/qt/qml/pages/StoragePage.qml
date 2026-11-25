@@ -85,7 +85,7 @@ Item {
                                        color: modelData.present ? Tokens.text : Tokens.dim
                                        font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: true }
                                 Text { width: parent.width; elide: Text.ElideRight; text: Tr.t(modelData.note); color: Tokens.dim
-                                       font.family: Tokens.font; font.pixelSize: 10 } }
+                                       font.family: Tokens.font; font.pixelSize: 12 } }
                             Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                                    horizontalAlignment: Text.AlignRight
                                    text: !modelData.scanned ? "…" : !modelData.present ? Tr.t("not found") : Tr.line(modelData.old + Tr.t(" old\n(") + modelData.all + Tr.t(" total)"))
@@ -95,7 +95,7 @@ Item {
                     Item { width: parent.width; height: 52
                         Text { anchors.verticalCenter: parent.verticalCenter; width: parent.width - 220; wrapMode: Text.Wrap
                                text: Tr.t("Only files older than a day are removed. This cannot be undone; the folders are rebuilt as needed.")
-                               color: Tokens.dim; font.family: Tokens.font; font.pixelSize: 10 }
+                               color: Tokens.dim; font.family: Tokens.font; font.pixelSize: 12 }
                         ConfirmButton { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; primary: true
                                         label: Tr.t("Clean selected (") + page.fmt(page.pickedBytes()) + ")"
                                         ready: !page.busy && page.picked().length > 0
@@ -116,7 +116,7 @@ Item {
                         Pill { label: Tr.t("Find big folders"); onClicked: if (!page.busy) tools.storScanFolders() }
                         Pill { label: Tr.t("Find large files (500 MB+)"); onClicked: if (!page.busy) tools.storScanLarge() } }
                     Text { visible: page.d.folders_done && (page.d.folders || []).length > 0; text: Tr.t("BIGGEST FOLDERS"); color: Tokens.sub
-                           font.family: Tokens.font; font.pixelSize: 10; font.bold: true }
+                           font.family: Tokens.font; font.pixelSize: 11; font.bold: true }
                     Repeater {
                         model: page.d.folders || []
                         Item { width: parent.width; height: 36
@@ -129,7 +129,7 @@ Item {
                                    label: Tr.t("Show"); onClicked: tools.storShow(modelData.path) } }
                     }
                     Text { visible: page.d.large_done && (page.d.large || []).length > 0; text: Tr.t("LARGE FILES"); color: Tokens.sub
-                           font.family: Tokens.font; font.pixelSize: 10; font.bold: true }
+                           font.family: Tokens.font; font.pixelSize: 11; font.bold: true }
                     Text { visible: page.d.large_done && (page.d.large || []).length === 0; text: Tr.t("No file of 500 MB or more was found."); color: Tokens.dim
                            font.family: Tokens.font; font.pixelSize: Tokens.fsBody }
                     Repeater {
@@ -139,7 +139,7 @@ Item {
                                 Text { width: parent.width; elide: Text.ElideMiddle; text: Tr.t(modelData.path); color: Tokens.text
                                        font.family: Tokens.font; font.pixelSize: Tokens.fsBody }
                                 Text { visible: modelData.reason !== ""; width: parent.width; elide: Text.ElideRight; text: Tr.t(modelData.reason)
-                                       color: Tokens.dim; font.family: Tokens.font; font.pixelSize: 10 } }
+                                       color: Tokens.dim; font.family: Tokens.font; font.pixelSize: 12 } }
                             Text { anchors.right: row2.left; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter
                                    text: Tr.t(modelData.size); color: Tokens.accent
                                    font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: true }

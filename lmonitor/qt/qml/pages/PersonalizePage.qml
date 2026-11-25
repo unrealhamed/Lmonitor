@@ -105,7 +105,7 @@ Item {
                             }
                             Text { anchors.horizontalCenter: parent.horizontalCenter; text: Tr.t(modelData.name)
                                    color: parent.on ? Tokens.text : Tokens.dim
-                                   font.family: Tokens.font; font.pixelSize: 11 }
+                                   font.family: Tokens.font; font.pixelSize: 12 }
                         }
                     }
                 }

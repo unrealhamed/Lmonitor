@@ -49,6 +49,14 @@ set "PY=python"
 for /f "usebackq delims=" %%V in (`%PY% tools\make_version.py lmonitor\engine.py "%ROOT%_build_qt\version_info.txt"`) do set "VER=%%V"
 if not defined VER set "VER=1.0.0"
 
+rem the installer's pictures (Lmonitor's own look, one per display scale)
+%PY% tools\make_installer_art.py
+if errorlevel 1 (
+    echo Installer pictures could not be made - installer not made.
+    pause
+    exit /b 1
+)
+
 rem only the installer of this version is replaced; older ones stay for testing
 if exist "%ROOT%_output\Lmonitor_Setup_%VER%.exe" del /f /q "%ROOT%_output\Lmonitor_Setup_%VER%.exe"
 "%ISCC%" /Qp "/DAppVersion=%VER%" "/DSourceDir=..\_build_qt\dist\Lmonitor" "%ROOT%installer\Lmonitor.iss"

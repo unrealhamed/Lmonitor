@@ -123,7 +123,12 @@ chk("worst frame of the last moment found (stutter)", st is not None and st[1] =
 st2 = fm.recent_stats(now - 0.02)
 chk("a moment without the slow frame does not report it", st2 is not None and st2[1] == 10.0)
 WinApi.foreground_pid = classmethod(lambda cls: 1)
-chk("other program in front: None", fm.recent_stats(now - 0.25) is None)
+# 1.21.2: something else in front for a moment keeps the game's numbers while the game draws;
+# only a game that stopped drawing (5 s) gives None
+chk("other program in front for a moment: still the game", fm.recent_stats(now - 0.25) is not None)
+p.last = now - 6
+chk("game stopped drawing: None", fm.recent_stats(now - 0.25) is None)
+p.last = now
 WinApi.foreground_pid = real_fg
 
 # ---- QML: smooth but light, drag with the mouse

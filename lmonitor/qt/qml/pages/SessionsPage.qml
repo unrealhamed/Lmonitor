@@ -18,15 +18,21 @@ Item {
     property int other: -1
     property var cmp: ({})
     property string saved: ""
+    property bool renaming: false
+    // the name belongs to the program: every session of it, now and later, shows it
+    function saveName() { tools.programRename(page.rep.exe || "", nameEdit.text); page.renaming = false }
 
     onItemsChanged: {
         var ok = false, ok2 = false
         for (var i = 0; i < items.length; ++i) { if (items[i].id === sel) ok = true; if (items[i].id === other) ok2 = true }
         if (!ok) { sel = items.length ? items[0].id : -1 }
         if (!ok2) other = -1
+        if (Object.keys(open).length === 0 && groups.length) {   // the newest game starts opened
+            var o = {}; o[keyOf(groups[0])] = true; open = o
+        }
         reload()
     }
-    onSelChanged: { details = false; saved = ""; reload() }
+    onSelChanged: { details = false; saved = ""; renaming = false; reload() }
     onOtherChanged: reload()
     function reload() {
         rep = sel >= 0 ? tools.sessionReport(sel) : ({})
@@ -37,12 +43,14 @@ Item {
         else if (!comparing) sel = id
     }
     function savePicture() {
+        page.saved = ""                      // the box above the report goes away for the picture
         flick.contentY = 0
         Qt.callLater(function () {
             var a = report.mapToItem(null, 0, 0), b = report.mapToItem(null, report.width, report.height)
             var path = tools.sessionImagePath(page.rep.game || "session")
-            if (tools.saveWindowArea(a.x, a.y, b.x, b.y, path)) { page.saved = path; tools.showFile(path) }
-            else page.saved = "!"
+            // then it says at the top where the picture is
+            page.saved = tools.saveWindowArea(a.x, a.y, b.x, b.y, path) ? path : "!"
+            flick.contentY = 0
         })
     }
 
@@ -71,56 +79,224 @@ Item {
                label: Tr.t("Turn on recording"); onClicked: tools.sessionsOn(true) }
     }
 
+    // ---- the list: one row per game (never two games in one row); the arrow opens its sessions
+    readonly property var groups: d.groups || []
+    property var open: ({})                 // game file (lower case) -> true while opened
+    property bool selecting: false          // "Select" mode: pick games / sessions to delete
+    property var picked: ({})               // "g:<file>" / "s:<id>" -> true
+    function keyOf(g) { return (g.exe || "").toLowerCase() }
+    function flat() {
+        var out = []
+        for (var i = 0; i < groups.length; ++i) {
+            var gr = groups[i]
+            out.push({kind: "g", g: gr})
+            if (open[keyOf(gr)])
+                for (var k = 0; k < gr.sessions.length; ++k) out.push({kind: "s", s: gr.sessions[k], g: gr})
+        }
+        return out
+    }
+    function toggleOpen(gr) { var o = Object.assign({}, open); o[keyOf(gr)] = !o[keyOf(gr)]; open = o }
+    function togglePick(key) { var o = Object.assign({}, picked); if (o[key]) delete o[key]; else o[key] = true; picked = o }
+    function pickedIds() {
+        var ids = {}
+        for (var i = 0; i < groups.length; ++i) {
+            var gr = groups[i], whole = !!picked["g:" + keyOf(gr)]
+            for (var k = 0; k < gr.sessions.length; ++k)
+                if (whole || picked["s:" + gr.sessions[k].id]) ids[gr.sessions[k].id] = true
+        }
+        return Object.keys(ids).map(function (x) { return parseInt(x) })
+    }
+    function endSelect() { selecting = false; picked = ({}) }
+
     Card {                                                   // list
         id: listCard
         visible: page.items.length > 0
-        y: head.height + 12; width: 330; height: parent.height - y
-        Text { id: pickHint; visible: page.comparing; x: 16; y: 12; width: parent.width - 32; wrapMode: Text.WordWrap
-               text: Tr.t("Pick the session to compare with."); color: Tokens.info
-               font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: true }
+        y: head.height + 12; width: 340; height: parent.height - y
+        Item {                                               // list header
+            id: listHead; x: 16; y: 10; width: parent.width - 32; height: 34
+            Text { anchors.verticalCenter: parent.verticalCenter; width: parent.width - selBtn.width - 8; elide: Text.ElideRight
+                   text: page.comparing ? Tr.t("Pick the session to compare with.")
+                         : page.selecting ? Tr.t("Pick what to delete") : Tr.t("Games")
+                   color: page.comparing ? Tokens.info : Tokens.text
+                   font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: true }
+            Pill { id: selBtn; visible: !page.comparing; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                   height: 30; label: page.selecting ? Tr.t("Cancel") : Tr.t("Select")
+                   onClicked: page.selecting ? page.endSelect() : (page.selecting = true) }
+        }
         ListView {
-            anchors.fill: parent; anchors.margins: 10; anchors.topMargin: page.comparing ? pickHint.height + 20 : 10
-            clip: true; spacing: 6
-            model: page.items; boundsBehavior: Flickable.StopAtBounds
+            id: lv
+            x: 10; y: listHead.y + listHead.height + 6; width: parent.width - 20
+            height: parent.height - y - (delBar.visible ? delBar.height + 12 : 10)
+            clip: true; spacing: 4
+            model: page.flat(); boundsBehavior: Flickable.StopAtBounds
             delegate: Rectangle {
-                readonly property bool isSel: modelData.id === page.sel
-                readonly property bool isOther: page.comparing && modelData.id === page.other
-                width: ListView.view.width; height: 66; radius: 12
-                color: isSel ? Tokens.accentA(0.16) : isOther ? Tokens.tint(Tokens.info, 0.16)
-                       : (ma.containsMouse ? Tokens.fg(0.05) : "transparent")
-                border.width: isSel || isOther ? 1 : 0; border.color: isOther ? Tokens.info : Tokens.accent
-                Column { x: 14; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 28; spacing: 2
-                    Text { width: parent.width; elide: Text.ElideRight; text: (modelData.bench ? Tr.t("Benchmark") + " · " : "") + modelData.game + (modelData.live ? Tr.t("  ● recording") : "")
-                           color: Tokens.text; font.family: Tokens.font; font.pixelSize: 14; font.bold: true }
-                    Text { text: modelData.when + "  ·  " + modelData.duration; color: Tokens.dim
-                           font.family: Tokens.font; font.pixelSize: 10 }
+                id: row
+                readonly property bool isG: modelData.kind === "g"
+                readonly property var gr: modelData.g
+                readonly property var se: modelData.s || ({})
+                readonly property string pk: isG ? "g:" + page.keyOf(gr) : "s:" + se.id
+                readonly property bool isPicked: !!page.picked[pk] || (!isG && !!page.picked["g:" + page.keyOf(gr)])
+                readonly property bool isSel: !isG && se.id === page.sel
+                readonly property bool isOther: !isG && page.comparing && se.id === page.other
+                readonly property bool opened: isG && !!page.open[page.keyOf(gr)]
+                width: lv.width; height: isG ? 62 : 52; radius: 10
+                color: isPicked ? Tokens.tint(Tokens.danger, 0.14) : isSel ? Tokens.accentA(0.16)
+                       : isOther ? Tokens.tint(Tokens.info, 0.16) : (rma.containsMouse ? Tokens.fg(0.05) : "transparent")
+                border.width: isSel || isOther || isPicked ? 1 : 0
+                border.color: isPicked ? Tokens.danger : isOther ? Tokens.info : Tokens.accent
+                Rectangle {                                  // check box in Select mode
+                    id: box
+                    visible: page.selecting
+                    x: row.isG ? 10 : 30; anchors.verticalCenter: parent.verticalCenter
+                    width: 18; height: 18; radius: 5; color: row.isPicked ? Tokens.danger : "transparent"
+                    border.width: 2; border.color: row.isPicked ? Tokens.danger : Tokens.lineStrong
+                    Text { anchors.centerIn: parent; visible: row.isPicked; text: "\uE73E"; color: "white"
+                           font.family: Tokens.iconFont; font.pixelSize: 11 }
+                }
+                // a game: arrow, name, how many sessions, total time, how it plays compared with its usual
+                Item {
+                    visible: row.isG
+                    x: page.selecting ? 36 : 6; width: parent.width - x - 10; height: parent.height
+                    Text { id: arrow; anchors.verticalCenter: parent.verticalCenter; width: 24; horizontalAlignment: Text.AlignHCenter
+                           text: "\uE70D"; color: amA.containsMouse ? Tokens.accent : Tokens.sub
+                           font.family: Tokens.iconFont; font.pixelSize: 12; rotation: row.opened ? 0 : -90
+                           Behavior on rotation { NumberAnimation { duration: 120 } }
+                           MouseArea { id: amA; anchors.fill: parent; anchors.margins: -8; hoverEnabled: true
+                                       cursorShape: Qt.PointingHandCursor; onClicked: page.toggleOpen(row.gr) } }
+                    Column {
+                        x: 30; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 30 - chip.width - 6; spacing: 3
+                        Text { width: parent.width; elide: Text.ElideRight; color: Tokens.text
+                               text: (row.gr.name || "") + (row.gr.live ? Tr.t("  ● recording") : "")
+                               font.family: Tokens.font; font.pixelSize: 14; font.bold: true }
+                        Text { width: parent.width; elide: Text.ElideRight; color: Tokens.dim
+                               font.family: Tokens.font; font.pixelSize: Tokens.fsSmall
+                               text: Tr.line(row.gr.count + Tr.t(row.gr.count === 1 ? " session" : " sessions") + "  ·  " + row.gr.total) }
+                    }
+                    Rectangle {
+                        id: chip
+                        visible: !!row.gr.status
+                        anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                        width: visible ? chipT.implicitWidth + 14 : 0; height: 22; radius: 6
+                        color: row.gr.status === "slower than usual" ? Tokens.tint(Tokens.warn, 0.15)
+                               : row.gr.status === "faster than usual" ? Tokens.accentA(0.15) : Tokens.fg(0.06)
+                        Text { id: chipT; anchors.centerIn: parent; text: Tr.t(row.gr.status || "")
+                               color: row.gr.status === "slower than usual" ? Tokens.warn
+                                      : row.gr.status === "faster than usual" ? Tokens.accent : Tokens.sub
+                               font.family: Tokens.font; font.pixelSize: 11; font.weight: Font.DemiBold }
+                    }
+                }
+                // one launch of the game
+                Column {
+                    visible: !row.isG
+                    x: page.selecting ? 56 : 34; anchors.verticalCenter: parent.verticalCenter; width: parent.width - x - 10; spacing: 2
+                    Text { width: parent.width; elide: Text.ElideRight; color: Tokens.text
+                           text: Tr.line((row.se.bench ? Tr.t("Benchmark") + "  ·  " : "") + (row.se.when || "") + "  ·  " + (row.se.duration || ""))
+                           font.family: Tokens.font; font.pixelSize: 13; font.weight: Font.DemiBold }
                     Text { color: Tokens.sub; font.family: Tokens.font; font.pixelSize: Tokens.fsSmall
-                           text: Tr.line((modelData.avg_fps !== null && modelData.avg_fps !== undefined ? Math.round(modelData.avg_fps) + Tr.t(" FPS avg") : Tr.t("FPS n/a"))
-                                 + (modelData.low1 !== null && modelData.low1 !== undefined ? Tr.t("  ·  1% low ") + Math.round(modelData.low1) : "")) } }
-                MouseArea { id: ma; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                            onClicked: page.pick(modelData.id) }
+                           text: Tr.line((row.se.avg_fps !== null && row.se.avg_fps !== undefined ? Math.round(row.se.avg_fps) + Tr.t(" FPS avg") : Tr.t("FPS n/a"))
+                                 + (row.se.low1 !== null && row.se.low1 !== undefined ? Tr.t("  ·  1% low ") + Math.round(row.se.low1) : "")
+                                 + (row.se.live ? Tr.t("  ● recording") : "")) }
+                }
+                MouseArea {
+                    id: rma; anchors.fill: parent; z: -1; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        if (page.selecting) { page.togglePick(row.pk); return }
+                        if (row.isG) {
+                            if (!row.opened) page.toggleOpen(row.gr)
+                            if (row.gr.sessions.length) page.pick(row.gr.sessions[0].id)   // its newest session
+                        } else page.pick(row.se.id)
+                    }
+                }
             }
+        }
+        Item {                                               // delete what was picked
+            id: delBar
+            visible: page.selecting
+            x: 12; width: parent.width - 24; height: 40; anchors.bottom: parent.bottom; anchors.bottomMargin: 10
+            readonly property int n: page.pickedIds().length
+            Text { anchors.verticalCenter: parent.verticalCenter; color: Tokens.sub; font.family: Tokens.font
+                   font.pixelSize: Tokens.fsSmall; text: Tr.line(delBar.n + Tr.t(" session(s) picked")) }
+            ConfirmButton { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; danger: true
+                            ready: delBar.n > 0; label: Tr.t("Delete")
+                            question: Tr.line(Tr.t("Delete ") + delBar.n + Tr.t(" session(s)?"))
+                            onConfirmed: { tools.sessionsDelete(page.pickedIds()); page.endSelect() } }
         }
     }
 
     Flickable {                                              // the report
         id: flick
         visible: page.items.length > 0 && page.sel >= 0
-        x: 330 + page.g; y: head.height + 12; width: parent.width - x; height: parent.height - y
+        x: listCard.width + page.g; y: head.height + 12; width: parent.width - x; height: parent.height - y
         contentWidth: width; contentHeight: dcol.height + 8
         clip: true; boundsBehavior: Flickable.StopAtBounds
         Column {
             id: dcol; width: parent.width - 8; spacing: page.g
 
+            Rectangle {                                      // where the picture went
+                id: savedBox
+                visible: page.saved !== ""; width: dcol.width; height: visible ? savedCol.height + 24 : 0; radius: 10
+                color: page.saved === "!" ? Tokens.tint(Tokens.danger, 0.12) : Tokens.accentA(0.10)
+                border.width: 1; border.color: page.saved === "!" ? Tokens.danger : Tokens.accent
+                Column {
+                    id: savedCol; x: 14; y: 12; width: parent.width - 28 - (openPic.visible ? openPic.width + 12 : 0); spacing: 4
+                    Text { text: page.saved === "!" ? Tr.t("The picture could not be saved.") : Tr.t("Picture saved here:")
+                           color: page.saved === "!" ? Tokens.danger : Tokens.text
+                           font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: true }
+                    TextEdit { visible: page.saved !== "!"; width: parent.width; wrapMode: TextEdit.WrapAnywhere
+                               readOnly: true; selectByMouse: true; text: page.saved; color: Tokens.text
+                               id: savedPath
+                               transform: Scale { origin.x: savedPath.width / 2; xScale: Tr.rtl ? -1 : 1 }
+                               horizontalAlignment: Tr.rtl ? TextEdit.AlignRight : TextEdit.AlignLeft
+                               selectionColor: Tokens.accentA(0.4); font.family: Tokens.font; font.pixelSize: Tokens.fsBody }
+                }
+                Pill { id: openPic; visible: page.saved !== "!"; anchors.right: parent.right; anchors.rightMargin: 12
+                       anchors.verticalCenter: parent.verticalCenter; label: Tr.t("Show in folder")
+                       onClicked: tools.showFile(page.saved) }
+            }
             Card {                                           // ---- main numbers + what was noticed
                 id: report
                 width: dcol.width; height: rcol.height + 36
                 Column {
                     id: rcol; x: 20; y: 18; width: parent.width - 40; spacing: 14
                     Column { width: parent.width; spacing: 2
-                        Text { width: parent.width; elide: Text.ElideRight; text: page.rep.game || ""; color: Tokens.text
-                               font.family: Tokens.fontDisplay; font.pixelSize: 20; font.weight: Font.DemiBold }
-                        Text { text: Tr.line((page.rep.when || "") + (page.rep.live ? Tr.t("  ·  still recording") : ""))
+                        Item {                               // the name - click the pencil to give it your own
+                            width: parent.width; height: 30
+                            Row {
+                                visible: !page.renaming; spacing: 8; anchors.verticalCenter: parent.verticalCenter
+                                Text { id: nameText; text: page.rep.game || ""; color: Tokens.text; elide: Text.ElideRight
+                                       width: Math.min(implicitWidth, rcol.width - 40)
+                                       font.family: Tokens.fontDisplay; font.pixelSize: 20; font.weight: Font.DemiBold }
+                                Text { text: "\uE70F"; color: penMa.containsMouse ? Tokens.accent : Tokens.sub
+                                       anchors.verticalCenter: parent.verticalCenter
+                                       font.family: Tokens.iconFont; font.pixelSize: 15
+                                       MouseArea { id: penMa; anchors.fill: parent; anchors.margins: -6; hoverEnabled: true
+                                                   cursorShape: Qt.PointingHandCursor
+                                                   onClicked: { page.renaming = true; nameEdit.text = page.rep.game || ""
+                                                                nameEdit.selectAll(); nameEdit.forceActiveFocus() } } }
+                            }
+                            Rectangle {
+                                visible: page.renaming; width: parent.width; height: 34; radius: 8
+                                color: Tokens.bg0; border.width: 1; border.color: Tokens.accent
+                                TextInput {
+                                    id: nameEdit
+                                    x: 10; width: parent.width - 20 - doneRow.width; anchors.verticalCenter: parent.verticalCenter
+                                    color: Tokens.text; selectionColor: Tokens.accentA(0.4); maximumLength: 60; clip: true
+                                    font.family: Tokens.fontDisplay; font.pixelSize: 17
+                                    transform: Scale { origin.x: nameEdit.width / 2; xScale: Tr.rtl ? -1 : 1 }
+                                    horizontalAlignment: Tr.rtl ? TextInput.AlignRight : TextInput.AlignLeft
+                                    onAccepted: page.saveName()
+                                    Keys.onEscapePressed: page.renaming = false
+                                }
+                                Row { id: doneRow; anchors.right: parent.right; anchors.rightMargin: 4; anchors.verticalCenter: parent.verticalCenter; spacing: 4
+                                    Pill { height: 26; label: Tr.t("Save"); primary: true; onClicked: page.saveName() }
+                                    Pill { height: 26; label: Tr.t("Cancel"); onClicked: page.renaming = false } }
+                            }
+                        }
+                        Text { visible: page.renaming; width: parent.width; wrapMode: Text.WordWrap
+                               text: Tr.t("This name is used for every session of this game, now and later. Leave it empty for the game's own name.")
+                               color: Tokens.sub; font.family: Tokens.font; font.pixelSize: Tokens.fsSmall }
+                        Text { text: Tr.line((page.rep.title ? page.rep.game_name + "  ·  " : "") + (page.rep.when || "")
+                                             + (page.rep.live ? Tr.t("  ·  still recording") : ""))
                                color: Tokens.dim; font.family: Tokens.font; font.pixelSize: Tokens.fsSmall } }
                     Text { width: parent.width; wrapMode: Text.WordWrap; text: Tr.t(page.rep.verdict || "")
                            color: (page.rep.noticed || []).some(function (n) { return n.sev === "warn" }) ? Tokens.warn : Tokens.accent
@@ -194,8 +370,27 @@ Item {
                             }
                         }
                     }
+                    Column {                                 // what a change would likely do (no promised numbers)
+                        width: parent.width; spacing: 6
+                        visible: (page.rep.whatif || []).length > 0
+                        Text { text: Tr.t("What would likely help"); color: Tokens.text; font.family: Tokens.font
+                               font.pixelSize: Tokens.fsHead; font.weight: Font.DemiBold }
+                        Repeater {
+                            model: page.rep.whatif || []
+                            Item {
+                                width: parent.width; height: wiT.implicitHeight
+                                Text { y: 1; text: modelData.sure ? "\uE73E" : "\uE9CE"; color: modelData.sure ? Tokens.accent : Tokens.dim
+                                       font.family: Tokens.iconFont; font.pixelSize: 12 }
+                                Text { id: wiT; x: 20; width: parent.width - 20; wrapMode: Text.WordWrap; text: Tr.t(modelData.text)
+                                       color: Tokens.sub; font.family: Tokens.font; font.pixelSize: Tokens.fsBody }
+                            }
+                        }
+                        Text { width: parent.width; wrapMode: Text.WordWrap; color: Tokens.dim
+                               font.family: Tokens.font; font.pixelSize: 12
+                               text: Tr.t("Worked out from what this session measured. These are directions, not promises - Lmonitor never guesses exact FPS.") }
+                    }
                     Text { width: parent.width; wrapMode: Text.WordWrap; color: Tokens.dim
-                           font.family: Tokens.font; font.pixelSize: 11
+                           font.family: Tokens.font; font.pixelSize: 12
                            text: Tr.t("Only measured values are shown. \"Not measured\" means the sensor or the frame counter was not available - it is never guessed.") }
                 }
             }
@@ -210,9 +405,6 @@ Item {
                 ConfirmButton { danger: true; label: Tr.t("Delete this session"); question: Tr.t("Delete it?")
                                 onConfirmed: tools.sessionDelete(page.sel) }
             }
-            Text { visible: page.saved !== ""; width: dcol.width; wrapMode: Text.WordWrap
-                   color: page.saved === "!" ? Tokens.danger : Tokens.sub; font.family: Tokens.font; font.pixelSize: Tokens.fsSmall
-                   text: page.saved === "!" ? Tr.t("The picture could not be saved.") : Tr.line(Tr.t("Saved: ") + page.saved) }
 
             Card {                                           // ---- comparison
                 visible: page.comparing
@@ -236,7 +428,7 @@ Item {
                             Text { y: 4; width: parent.width * 0.62; wrapMode: Text.WordWrap; text: Tr.t(modelData.text)
                                    color: modelData.better === true ? Tokens.accent : modelData.better === false ? Tokens.warn : Tokens.text
                                    font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: modelData.better !== null }
-                            Text { y: 24; text: Tr.t(modelData.label); color: Tokens.dim; font.family: Tokens.font; font.pixelSize: 11 }
+                            Text { y: 24; text: Tr.t(modelData.label); color: Tokens.dim; font.family: Tokens.font; font.pixelSize: 12 }
                             Text { anchors.right: parent.right; y: 10; text: modelData.before_text + "  →  " + modelData.after_text
                                    color: Tokens.sub; font.family: Tokens.font; font.pixelSize: Tokens.fsBody }
                         }
@@ -247,7 +439,7 @@ Item {
                         Text { width: cCol.width; wrapMode: Text.WordWrap; text: "•  " + Tr.t(modelData); color: Tokens.sub
                                font.family: Tokens.font; font.pixelSize: Tokens.fsSmall } }
                     Text { visible: page.cmp.ok === true; width: parent.width; wrapMode: Text.WordWrap; color: Tokens.dim
-                           font.family: Tokens.font; font.pixelSize: 11
+                           font.family: Tokens.font; font.pixelSize: 12
                            text: Tr.t("Small differences (under 3% FPS or 2 °C) count as the same: two plays of a game are never exactly alike.") }
                 }
             }

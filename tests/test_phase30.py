@@ -93,9 +93,9 @@ class FakeStore:
 
 b.fps, b.sessions, b.session_store = FakeFps(), FakeSess(), FakeStore()
 nb = b.now_box()
-chk("right now: the game and its frame rate", nb["game"] == {"name": "game.exe", "fps": 144, "avg": 140, "low": 101})
+chk("right now: the game and its frame rate", nb["game"] == {"name": "game", "fps": 144, "avg": 140, "low": 101})   # 1.21.4: names without .exe (or your own name)
 chk("right now: recording state", nb["recording"] is True and nb["session"] == "Recording game.exe")
-chk("right now: the last finished session (not the running one)", nb["last"]["game"] == "old.exe" and nb["last"]["avg_fps"] == 88.4)
+chk("right now: the last finished session (not the running one)", nb["last"]["game"] == "old" and nb["last"]["avg_fps"] == 88.4)
 FakeFps.alive = False
 chk("no capture: no game, never a made-up number", b.now_box()["game"] is None)
 

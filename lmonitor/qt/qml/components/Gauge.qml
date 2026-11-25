@@ -40,6 +40,6 @@ Item {
     Text {
         anchors.horizontalCenter: parent.horizontalCenter; anchors.top: num.bottom; anchors.topMargin: -2
         text: root.has ? "°C" : Tr.t("no sensor")
-        color: Tokens.dim; font.family: Tokens.font; font.pixelSize: 10
+        color: Tokens.dim; font.family: Tokens.font; font.pixelSize: 11
     }
 }

@@ -123,7 +123,7 @@ Item {
                                 Text { width: parent.width; elide: Text.ElideRight; text: Tr.t(modelData.name); color: modelData.enabled ? Tokens.text : Tokens.dim
                                        font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: true }
                                 Text { width: parent.width; elide: Text.ElideMiddle; text: modelData.where + "  ·  " + modelData.cmd; color: Tokens.dim
-                                       font.family: Tokens.font; font.pixelSize: 10 } }
+                                       font.family: Tokens.font; font.pixelSize: 12 } }
                             ToggleSwitch { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                                            checked: modelData.enabled
                                            onToggled: function (v) { if (!page.busy) tools.optStartup(modelData.key, v) } }
@@ -148,7 +148,7 @@ Item {
                                        font.family: Tokens.font; font.pixelSize: Tokens.fsBody; font.bold: true }
                                 Text { width: parent.width; elide: Text.ElideRight; color: Tokens.dim
                                        text: modelData.when + "  ·  " + Tr.t(modelData.status)
-                                       font.family: Tokens.font; font.pixelSize: 10 } }
+                                       font.family: Tokens.font; font.pixelSize: 12 } }
                             Pill { visible: modelData.undo; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                                    label: Tr.t("Undo"); height: 30; onClicked: if (!page.busy) tools.optUndo(modelData.id) }
                         }

@@ -41,3 +41,6 @@ desktop.ini
 *.log
 sessions.db
 settings.json
+
+# made by tools/make_installer_art.py at build time
+installer/art/

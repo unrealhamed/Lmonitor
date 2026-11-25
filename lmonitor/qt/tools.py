@@ -317,12 +317,41 @@ class Tools(QObject):
             Logger.error("qt session detail")
             return []
 
+    @Slot("QVariantList")
+    def sessionsDelete(self, ids):
+        """Several sessions at once (a whole game = all of its sessions)."""
+        try:
+            self._b.session_store.delete([int(i) for i in ids])
+        except Exception:
+            Logger.error("qt sessions delete")
+        Tools._sess_gen += 1
+        self._bump("sessions")
+
     @Slot(int)
     def sessionDelete(self, sid):
         try:
             self._b.session_store.delete([sid])
         except Exception:
             Logger.error("qt session delete")
+        Tools._sess_gen += 1
+        self._bump("sessions")
+
+    @Slot(str, str)
+    def programRename(self, exe, name):
+        try:
+            self._b.name_program(exe, name)
+            self._bridge.settingsTouched()       # saved with the settings
+        except Exception:
+            Logger.error("qt program rename")
+        Tools._sess_gen += 1
+        self._bump("sessions")
+
+    @Slot(int, str)
+    def sessionRename(self, sid, title):
+        try:
+            self._b.session_store.rename(sid, title)
+        except Exception:
+            Logger.error("qt session rename")
         Tools._sess_gen += 1
         self._bump("sessions")
 

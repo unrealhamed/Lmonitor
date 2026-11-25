@@ -185,7 +185,7 @@ Item {
                             Rectangle { width: Math.max(3, parent.width * (hr.h.frac || 0)); height: parent.height; radius: 3
                                         color: page.cDown } }
                 Text { visible: !hr.whole; anchors.right: parent.right; anchors.rightMargin: 12; y: 25
-                       color: Tokens.dim; font.family: Tokens.font; font.pixelSize: 10
+                       color: Tokens.dim; font.family: Tokens.font; font.pixelSize: 12
                        text: Tr.line("↓ " + (hr.h.down || "") + "   ↑ " + (hr.h.up || "")) }
                 MouseArea { id: hrMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                             onClicked: hr.whole ? backend.netUsageHour(-1) : backend.netUsageHour(hr.h.h) }
@@ -223,7 +223,7 @@ Item {
                                 Rectangle { width: Math.max(3, parent.width * modelData.frac); height: parent.height; radius: 3
                                             color: Tokens.accent } }
                     Text { y: 27; text: Tr.line("↓ " + modelData.down + "   ↑ " + modelData.up); color: Tokens.dim
-                           font.family: Tokens.font; font.pixelSize: 10 }
+                           font.family: Tokens.font; font.pixelSize: 12 }
                 }
             }
         }

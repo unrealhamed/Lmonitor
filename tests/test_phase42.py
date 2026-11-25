@@ -181,7 +181,7 @@ gp = b.game_profile()
 chk("Overlay page data: on, game, own settings, count", set(gp) == {"on", "game", "has_own", "count"})
 
 # ================================================================ alerts from real readings
-chk("warnings are checked on every reading", "self.alerts.check(snap, self._game_fps(), thermal=self.gpu.thermal)"
+chk("warnings are checked on every reading", "self.alerts.check(snap, game_fps, thermal=self.gpu.thermal)"
     in read("lmonitor", "backend.py"))
 chk("NVIDIA's own 'slowed down by heat' flag is read", "nvmlDeviceGetCurrentClocksEventReasons" in hw and "THERMAL_BITS" in hw)
 

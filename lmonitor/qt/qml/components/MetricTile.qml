@@ -36,18 +36,19 @@ Card {
         id: badge
         anchors.right: parent.right; anchors.rightMargin: 18; y: 20
         readonly property color c: root.status === "none" ? Tokens.dim : Tokens.statusColor(root.status)
-        width: badgeRow.width + 16; height: 22; radius: 6; color: Tokens.tint(c, 0.13)
+        // narrow cards: only the colored dot, so the name is not cut off
+        width: root.width >= 250 ? badgeRow.width + 16 : 22; height: 22; radius: 6; color: Tokens.tint(c, 0.13)
         Row { id: badgeRow; anchors.centerIn: parent; spacing: 6
               Rectangle { width: 7; height: 7; radius: 4; color: badge.c; anchors.verticalCenter: parent.verticalCenter }
-              Text { text: Tokens.statusText(root.status); color: badge.c
+              Text { visible: root.width >= 250; text: Tokens.statusText(root.status); color: badge.c
                      font.family: Tokens.font; font.pixelSize: 12; font.weight: Font.DemiBold } }
     }
     Column {
-        x: 18; y: root.gauge ? 66 : 64; width: parent.width - 36 - (root.gauge ? 86 : 0); spacing: 2
+        x: 18; y: root.gauge && root.bar < 0 ? 66 : 54; width: parent.width - 36 - (root.gauge ? 86 : 0); spacing: 1
         Row {
             spacing: 2
             Text { text: root.big; color: Tokens.text
-                   font.family: Tokens.fontDisplay; font.pixelSize: 34; font.weight: Font.DemiBold }
+                   font.family: Tokens.fontDisplay; font.pixelSize: root.bar >= 0 && root.gauge ? 30 : 34; font.weight: Font.DemiBold }
             Text { anchors.baseline: parent.children[0].baseline; text: root.bigUnit; color: Tokens.sub
                    font.family: Tokens.font; font.pixelSize: 15; font.weight: Font.DemiBold }
         }
@@ -57,8 +58,10 @@ Card {
                color: root.warning !== "" ? Tokens.warn : Tokens.sub; width: parent.width; elide: Text.ElideRight
                font.family: Tokens.font; font.pixelSize: 12; font.weight: Font.DemiBold }
     }
-    Gauge { visible: root.gauge; anchors.right: parent.right; anchors.rightMargin: 16; y: 70
-            width: 76; height: 76; value: root.gaugeValue
+    Gauge { visible: root.gauge; anchors.right: parent.right; anchors.rightMargin: 16
+            // fits small tiles too (gauge + bar together): never runs into the bar at the bottom
+            readonly property real sz: Math.min(76, root.height - (root.bar >= 0 ? 88 : 80))
+            y: root.bar >= 0 ? 54 : 70; width: sz; height: sz; value: root.gaugeValue
             color: root.status === "hot" ? Tokens.danger : root.status === "warm" ? Tokens.warn : root.tone }
     Rectangle {
         visible: root.bar >= 0

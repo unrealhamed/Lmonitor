@@ -152,8 +152,8 @@ chk("scan then report", "def repScan" in read("lmonitor", "qt", "tools.py"))
 chk("built exe keeps Windows' own taskbar identity (icon, pinning)", 'if not getattr(sys, "frozen", False):\n            try:\n                cls.shell32.SetCurrentProcessExplicitAppUserModelID' in src)
 chk("main window gets the icon", "engine.rootObjects()[0].setIcon(ico)" in app)
 about = read("lmonitor", "qt", "qml", "pages", "About.qml")
-chk("About: the author's text", "Lmonitor is a overly and system monitor for windows." in about
-    and "Made by a Claude and new developer named unrealhamed." in about and "github.com/unrealhamed/Lmonitor" in about)
+chk("About: the author's text (spelling fixed in 1.22)", "Lmonitor is an overlay and system monitor for Windows." in about
+    and "Made by unrealhamed, a new developer, together with Claude." in about and "github.com/unrealhamed/Lmonitor" in about)
 fa = read("lmonitor", "qt", "qml", "Lmonitor", "fa.js")
 for s in ("Anti-cheat safe mode", "Graph 2", "PC check", "INTERFACE AND TEXT SIZE", "Made by a Claude and new developer named unrealhamed."):
     chk("Persian text for '%s'" % s[:30], '"%s":' % s in fa)

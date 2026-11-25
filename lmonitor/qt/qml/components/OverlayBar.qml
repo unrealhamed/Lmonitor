@@ -23,9 +23,19 @@ Item {
     readonly property bool glass: style.look === "glass"
     readonly property real bgAlpha: glass ? 0.16 : (style.alpha || 80) / 100
     property bool reorder: false
+    // which screen edge the bar touches ("left", "right", "center" = top middle, "" = free):
+    // there the corners are square and the bar sits flush against that side of its window
+    property string edge: ""
     implicitWidth: (horizontal ? row.implicitWidth : col.implicitWidth) + 20
     implicitHeight: (horizontal ? row.implicitHeight : col.implicitHeight) + 12
     width: implicitWidth; height: implicitHeight
+    // The overlay window only grows (resizing a window above a game every second costs the
+    // game frames); the visible bar is always exactly as big as its content and sits at the
+    // chosen side of that window. Before, the background filled the whole window and stayed
+    // too wide after the numbers got shorter.
+    readonly property real cx: edge === "right" ? width - implicitWidth
+                             : edge === "center" ? Math.round((width - implicitWidth) / 2) : 0
+    readonly property bool atTop: edge === "left" || edge === "right" || edge === "center"
 
     function esc(t) { return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") }
     function markup(g) {
@@ -60,8 +70,11 @@ Item {
     Transition { id: glide; NumberAnimation { properties: "x,y"; duration: 280; easing.type: Easing.OutCubic } }
 
     Rectangle {
-        anchors.fill: parent
-        radius: 10
+        x: bar.cx; width: bar.implicitWidth; height: bar.implicitHeight
+        topLeftRadius: bar.atTop || bar.edge === "left" ? 0 : 10
+        topRightRadius: bar.atTop || bar.edge === "right" ? 0 : 10
+        bottomLeftRadius: bar.edge === "left" ? 0 : 10
+        bottomRightRadius: bar.edge === "right" ? 0 : 10
         color: Qt.rgba(Qt.color(style.bg_hex || "#101010").r,
                        Qt.color(style.bg_hex || "#101010").g,
                        Qt.color(style.bg_hex || "#101010").b, bar.bgAlpha)
@@ -70,7 +83,7 @@ Item {
     }
     Rectangle {                       // glass highlight
         visible: bar.glass
-        anchors.fill: parent; anchors.margins: 1; radius: 9
+        x: bar.cx + 1; y: 1; width: bar.implicitWidth - 2; height: bar.implicitHeight - 2; radius: 9
         gradient: Gradient {
             GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.14) }
             GradientStop { position: 0.55; color: Qt.rgba(1, 1, 1, 0.0) }
@@ -80,7 +93,7 @@ Item {
     Row {
         id: row
         visible: bar.horizontal
-        x: 10; y: 6
+        x: bar.cx + 10; y: 6
         spacing: 10
         move: bar.reorder ? glide : null
         Repeater {
@@ -97,7 +110,10 @@ Item {
             visible: !!bar.model.graph && bar.model.graph.length > 1
             width: 120; height: bar.px + 6
             values: bar.model.graph || []
-            maxValue: { var m = 1; var v = values || []; for (var i = 0; i < v.length; ++i) if (v[i] > m) m = v[i]; return m * 1.15 }
+            // the scale follows the usual frame time (not the biggest spike), so it does not
+            // jump up and down every time a slow frame comes or goes; spikes reach the top
+            maxValue: { var v = (values || []).slice().sort(function (a, b) { return a - b })
+                        return v.length ? Math.max(1, v[Math.floor(v.length / 2)] * 2.2) : 1 }
             slots: Math.max(2, values.length)
             slide: false
             color: Tokens.cyan
@@ -106,7 +122,7 @@ Item {
     Column {
         id: col
         visible: !bar.horizontal
-        x: 10; y: 6
+        x: bar.cx + 10; y: 6
         spacing: 4
         move: bar.reorder ? glide : null
         Repeater {

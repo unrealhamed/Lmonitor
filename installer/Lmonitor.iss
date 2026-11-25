@@ -8,15 +8,22 @@
 #ifndef AppVersion
   #define AppVersion "1.0.0"
 #endif
-#define AppName "Lmonitor"
+#ifndef AppName
+  #define AppName "Lmonitor"
+#endif
 #define AppExe  "Lmonitor.exe"
 #ifndef SourceDir
   #define SourceDir "..\_build\dist\Lmonitor"
 #endif
 
+#ifndef AppIdValue
+  ; Never change AppId: it is how a new version finds and upgrades the old one.
+  ; (Only a test build may set another one, so it can be installed next to the real one.)
+  #define AppIdValue "{{6E1F4B52-9C0A-4D5B-8E37-2A7C91D4F0B3}"
+#endif
+
 [Setup]
-; Never change AppId: it is how a new version finds and upgrades the old one.
-AppId={{6E1F4B52-9C0A-4D5B-8E37-2A7C91D4F0B3}
+AppId={#AppIdValue}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
@@ -35,7 +42,22 @@ UninstallDisplayIcon={app}\{#AppExe}
 UninstallDisplayName={#AppName}
 Compression=lzma2/max
 SolidCompression=yes
-WizardStyle=modern
+; Lmonitor's look: the Windows 11 style, light or dark like Windows itself, with Lmonitor's own
+; background in dark mode and its own pictures (made by tools/make_installer_art.py)
+WizardStyle=modern dynamic windows11 hidebevels
+WizardBackColorDynamicDark=#0E1014
+WizardImageFile=art\wizard-164x314.bmp,art\wizard-192x386.bmp,art\wizard-246x459.bmp,art\wizard-273x556.bmp,art\wizard-328x604.bmp,art\wizard-355x700.bmp,art\wizard-410x797.bmp
+WizardImageStretch=no
+WizardImageBackColor=#0E1014
+WizardSmallImageFile=art\small-55x55.bmp,art\small-64x68.bmp,art\small-83x80.bmp,art\small-92x97.bmp,art\small-110x106.bmp,art\small-119x123.bmp,art\small-138x140.bmp
+; in dark mode Windows-style Setup swaps in its own pictures unless these are given
+WizardImageFileDynamicDark=art\wizard-164x314.bmp,art\wizard-192x386.bmp,art\wizard-246x459.bmp,art\wizard-273x556.bmp,art\wizard-328x604.bmp,art\wizard-355x700.bmp,art\wizard-410x797.bmp
+WizardSmallImageFileDynamicDark=art\small-dark-55x55.bmp,art\small-dark-64x68.bmp,art\small-dark-83x80.bmp,art\small-dark-92x97.bmp,art\small-dark-110x106.bmp,art\small-dark-119x123.bmp,art\small-dark-138x140.bmp
+; few pages: welcome, folder (only on a first install), options, progress, done
+DisableWelcomePage=no
+DisableReadyPage=yes
+DisableDirPage=auto
+ShowLanguageDialog=no
 ; the program is running (overlay/tray): close it for the update
 AppMutex=LmonitorOverlay
 CloseApplications=yes
@@ -44,10 +66,29 @@ RestartApplications=no
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
+[Messages]
+WelcomeLabel1=Welcome to Lmonitor
+WelcomeLabel2=Lmonitor shows your FPS, temperatures and more on top of your games, and tells you in plain words how your PC is doing.%n%nSetup takes about a minute. If Lmonitor is open, it is closed for the update and your settings are kept.
+FinishedHeadingLabel=Lmonitor is ready
+FinishedLabelNoIcons=Lmonitor is installed. You find it in the Start menu.
+FinishedLabel=Lmonitor is installed. You find it in the Start menu.
+SelectTasksDesc=Pick what you want - you can change it later.
+SelectTasksLabel2=
+ClickNext=Click Next to continue.
+WizardSelectTasks=Options
+ButtonFinish=&Done
+StatusExtractFiles=Copying Lmonitor's files...
+SetupAppTitle=Lmonitor setup
+SetupWindowTitle=Lmonitor %1 setup
+UninstallAppTitle=Remove Lmonitor
+UninstallAppFullTitle=Remove %1
+ConfirmUninstall=Remove Lmonitor from this PC?%n%nYou are asked next whether to keep your settings and game history.
+UninstalledAll=Lmonitor was removed from this PC.
+
 [Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
+Name: "desktopicon"; Description: "Put a Lmonitor icon on the desktop"; GroupDescription: "Shortcuts:"; Flags: unchecked
 ; the driver is shared with other tools and is never removed by our uninstaller
-Name: "pawnio"; Description: "Install the PawnIO driver (needed for CPU temperature and power)"; GroupDescription: "Sensors:"; Check: not PawnIoInstalled
+Name: "pawnio"; Description: "Install the PawnIO driver - needed to show CPU temperature and power (recommended)"; GroupDescription: "Sensors:"; Check: not PawnIoInstalled
 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -61,12 +102,20 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; IconFilename: "{a
 
 [Run]
 ; shellexec: the program asks for administrator rights itself (UAC)
-Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent shellexec
+#ifdef TestBuild
+Filename: "{app}\{#AppExe}"; Description: "Open Lmonitor now"; Flags: nowait postinstall skipifsilent shellexec unchecked
+#else
+Filename: "{app}\{#AppExe}"; Description: "Open Lmonitor now"; Flags: nowait postinstall skipifsilent shellexec
+#endif
 
+#ifndef TestBuild
+; (a test build - installed next to the real Lmonitor to check this installer - leaves the real
+;  program, its "Start with Windows" task and RivaTuner profile alone)
 [UninstallRun]
 Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM {#AppExe}"; Flags: runhidden; RunOnceId: "KillLmonitor"
 ; the "Start with Windows" task (if the user switched it on)
 Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""Lmonitor"" /F"; Flags: runhidden; RunOnceId: "LmonitorTask"
+#endif
 
 [Code]
 function PawnIoInstalled(): Boolean;
@@ -105,9 +154,9 @@ begin
       SuppressibleMsgBox('The PawnIO driver is installed. Restart Windows if CPU temperature stays empty.',
                          mbInformation, MB_OK, IDOK)
     else
-      SuppressibleMsgBox('The PawnIO driver could not be installed (code ' + IntToStr(Code) + ').' + #13#10 +
-                         'Lmonitor still works, but CPU temperature and power will be missing.' + #13#10 +
-                         'You can retry later from the yellow message inside Lmonitor.',
+      SuppressibleMsgBox('The PawnIO sensor driver could not be installed (error ' + IntToStr(Code) + ').' + #13#10#13#10 +
+                         'Lmonitor still works, but CPU temperature and power will show "--".' + #13#10 +
+                         'Run this setup again later to try once more.',
                          mbError, MB_OK, IDOK);
   end;
 end;
@@ -118,12 +167,14 @@ var
 begin
   if CurUninstallStep = usPostUninstall then
   begin
+#ifndef TestBuild
     if RtssDir() <> '' then                       { the RivaTuner profile made at install }
       DeleteFile(RtssDir() + '\Profiles\{#AppExe}.cfg');
+#endif
     Dir := ExpandConstant('{userappdata}\Lmonitor');
     { default = keep. A silent uninstall never deletes settings. }
     if (not UninstallSilent) and DirExists(Dir) then
-      if MsgBox('Also delete your Lmonitor settings and error log?' + #13#10 +
+      if MsgBox('Also delete your Lmonitor settings and game history?' + #13#10 +
                 Dir + #13#10#13#10 + 'Choose No to keep them for a later install.',
                 mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
         DelTree(Dir, True, True, True);

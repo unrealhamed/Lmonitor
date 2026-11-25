@@ -267,6 +267,8 @@ class Bridge(QObject):
             self._wake.wait(max(0.05, period - (time.monotonic() - started)))
             self._wake.clear()
 
+    BAR_FPS_PERIOD = 0.33
+
     def _overlay_loop(self):
         """The bar's numbers (only while the bar is on screen) and, every 2 s,
         PresentMon / game-session housekeeping."""
@@ -296,7 +298,9 @@ class Bridge(QObject):
                     texts = b.overlay_read()
                     self._last_texts = texts
                     self._overlay_sampled.emit(b.overlay_view(texts))
-                    wait = 0.5 if fps_in_bar else max(0.5, float(b.settings["refresh"]))
+                    # FPS in the bar: 3 times a second, so the number and its graph move
+                    # steadily (the reading itself is cheap - frames are already in memory)
+                    wait = self.BAR_FPS_PERIOD if fps_in_bar else max(0.5, float(b.settings["refresh"]))
                 b.graph_fast = self._graph_fast and self._ui_visible and not self._covered
                 if hud or self._hud_page or b.graph_fast:
                     # the graph overlay (or its settings page): new data once per reading -

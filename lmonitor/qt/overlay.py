@@ -76,10 +76,10 @@ class OverlayHost(QObject):
             x, y = g.x() + S["x"] / dpr, g.y() + S["y"] / dpr
         elif S["pos"] == "center":
             x, y = g.x() + (g.width() - ww) / 2, g.y()
-        elif S["pos"] == "right":
-            x, y = g.x() + g.width() - ww - Theme.MARGIN / dpr, g.y()
-        else:
-            x, y = g.x() + Theme.MARGIN / dpr, g.y()
+        elif S["pos"] == "right":                     # flush with the right edge
+            x, y = g.x() + g.width() - ww, g.y()
+        else:                                         # flush with the left edge
+            x, y = g.x(), g.y()
         x = max(g.x(), min(g.x() + g.width() - ww, x))      # stay on the display
         y = max(g.y(), min(g.y() + g.height() - wh, y))
         return int(x), int(y)
@@ -167,7 +167,9 @@ class OverlayHost(QObject):
         self._ticks = getattr(self, "_ticks", 0) + 1
         if self._ticks % 125 == 0 and self.win is not None and self.win.isVisible():
             try:                                   # every 5 s: stay above a game window
-                WinApi.keep_on_top_hwnd(int(self.win.winId()))
+                h = int(self.win.winId())
+                if WinApi.covered(h):
+                    WinApi.keep_on_top_hwnd(h)
             except Exception:
                 pass
 
@@ -333,7 +335,9 @@ class HudHost(QObject):
         self._ticks += 1
         if self._ticks % 125 == 0 and self.win is not None and self.win.isVisible():
             try:                                   # every 5 s: stay above a game window
-                WinApi.keep_on_top_hwnd(int(self.win.winId()))
+                h = int(self.win.winId())
+                if WinApi.covered(h):
+                    WinApi.keep_on_top_hwnd(h)
             except Exception:
                 pass
 

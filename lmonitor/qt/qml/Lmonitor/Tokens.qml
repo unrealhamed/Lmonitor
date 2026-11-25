@@ -50,7 +50,7 @@ QtObject {
     readonly property int fsHead: 15
     readonly property int fsBig: 34
     readonly property int fsBody: 13
-    readonly property int fsSmall: 11
+    readonly property int fsSmall: 12
 
     function fmtNet(bps, unit) {        // the same text as the overlay (engine.fmt_net)
         if (bps === null || bps === undefined) return "--"

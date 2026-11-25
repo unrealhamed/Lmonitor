@@ -22,6 +22,12 @@ Window {
         if (bar.implicitHeight > keepH) keepH = bar.implicitHeight
     }
     function fit() { keepW = Math.max(1, bar.implicitWidth); keepH = Math.max(1, bar.implicitHeight) }
+    // the content stayed clearly smaller for a while (a metric switched off, "N/A" -> a number):
+    // the window gets smaller again, once - not with every changing digit
+    Timer {
+        interval: 8000; repeat: true; running: w.visible
+        onTriggered: if (w.keepW > bar.implicitWidth + 24 || w.keepH > bar.implicitHeight + 8) w.fit()
+    }
     Connections {
         target: bar
         function onImplicitWidthChanged() { w.grow() }
@@ -39,10 +45,11 @@ Window {
         anchors.fill: parent
         model: backend.overlay
         style: backend.settings
+        edge: ({left: "left", right: "right", center: "center"})[backend.settings.pos] || ""
     }
     Rectangle {                         // move-mode outline
-        anchors.fill: parent
         visible: backend.moving
+        x: bar.cx; width: bar.implicitWidth; height: bar.implicitHeight
         color: "transparent"
         radius: 10
         border.width: 2
